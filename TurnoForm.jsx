@@ -1,3 +1,8 @@
+import React from "react";
+import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock } from "lucide-react";
+import { Card, Field, Badge } from "./ui";
+import { PLATFORMS, num, money, classifyTurno, uid } from "./lib";
+
 export default function TurnoForm({ wallets, draft, identity, goOps }) {
   const { meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf,
