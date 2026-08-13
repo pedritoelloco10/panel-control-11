@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { background: #020617; }
+
+.input { width: 100%; background: rgb(255 255 255 / 0.04); border: 1px solid rgb(255 255 255 / 0.08); border-radius: 0.65rem; padding: 0.6rem 0.7rem; font-size: 0.8rem; color: rgb(241 245 249); outline: none; }
+.input:focus { border-color: rgb(129 140 248); }
+.hint { font-size: 10.5px; color: rgb(100 116 139); margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.add-btn { display:flex; align-items:center; gap:0.3rem; font-size:0.72rem; font-weight:700; color: rgb(165 180 252); margin-top: 0.25rem; }
