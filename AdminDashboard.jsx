@@ -11,14 +11,19 @@ import { PLATFORMS, DB_TYPES, num, money, todayStr, classifyTurno } from "./lib"
 function computeShift(shift) {
   let ventasTotal = 0, retirosTotal = 0;
   let nuevos = 0, derivados = 0, cargasLista = 0, montoLista = 0;
+  const porPlataforma = { B: { ventas: 0, premios: 0 }, G: { ventas: 0, premios: 0 } };
   (shift.ops || []).forEach((o) => {
     const m = num(o.monto);
     if (o.tipo === "carga") {
       ventasTotal += m;
+      if (porPlataforma[o.plataforma]) porPlataforma[o.plataforma].ventas += m;
       if (o.origen === "nuevo") nuevos++;
       if (o.origen === "derivado") derivados++;
       if (o.origen === "lista") { cargasLista++; montoLista += m; }
-    } else retirosTotal += m;
+    } else {
+      retirosTotal += m;
+      if (porPlataforma[o.plataforma]) porPlataforma[o.plataforma].premios += m;
+    }
   });
   const bajadasTotal = (shift.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
   const billInicioTotal = Object.values(shift.bill_inicio || {}).reduce((s, v) => s + num(v), 0);
@@ -27,7 +32,7 @@ function computeShift(shift) {
   const diffEfectivo = billCierreTotal - efectivoEsperado;
   const netoCaja = ventasTotal - retirosTotal - bajadasTotal;
   const mensajesEnviados = num(shift.mensajes_enviados);
-  return { shift, ventasTotal, retirosTotal, bajadasTotal, netoCaja, diffEfectivo, nuevos, derivados, cargasLista, montoLista, mensajesEnviados, opsCount: (shift.ops || []).length };
+  return { shift, ventasTotal, retirosTotal, bajadasTotal, netoCaja, diffEfectivo, nuevos, derivados, cargasLista, montoLista, mensajesEnviados, opsCount: (shift.ops || []).length, porPlataforma };
 }
 
 export default function AdminDashboard({ onExit }) {
@@ -112,10 +117,11 @@ export default function AdminDashboard({ onExit }) {
       const billInicioTotal = Object.values(live.bill_inicio || {}).reduce((s, v) => s + num(v), 0);
       let ventasTotal = 0, retirosTotal = 0;
       const porPlataforma = { B: 0, G: 0 };
+      const ventasPorPlataforma = { B: 0, G: 0 }, premiosPorPlataforma = { B: 0, G: 0 };
       (live.ops || []).forEach((o) => {
         const m = num(o.monto);
-        if (o.tipo === "carga") { ventasTotal += m; porPlataforma[o.plataforma] -= m + num(o.bono); }
-        else { retirosTotal += m; porPlataforma[o.plataforma] += m; }
+        if (o.tipo === "carga") { ventasTotal += m; porPlataforma[o.plataforma] -= m + num(o.bono); ventasPorPlataforma[o.plataforma] += m; }
+        else { retirosTotal += m; porPlataforma[o.plataforma] += m; premiosPorPlataforma[o.plataforma] += m; }
       });
       const bajadasTotal = (live.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
       const cajaTotal = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal;
@@ -128,6 +134,7 @@ export default function AdminDashboard({ onExit }) {
       const baseStats = empTodayBaseStats[live.responsable] || { contestados: 0, cargaron: 0 };
       return {
         enVivo: true, responsable: live.responsable, cajaTotal, ventasTurno: ventasTotal, premiosTurno: retirosTotal, fichas,
+        ventasPorPlataforma, premiosPorPlataforma,
         mensajes: num(live.mensajes_enviados), contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: (live.movs || []).length, opsCount: (live.ops || []).length, horaInicio: live.hora_inicio,
       };
@@ -138,7 +145,8 @@ export default function AdminDashboard({ onExit }) {
       const baseStats = empTodayBaseStats[last.responsable] || { contestados: 0, cargaron: 0 };
       return {
         enVivo: false, responsable: last.responsable, cajaTotal: billCierreTotal, ventasTurno: c.ventasTotal, premiosTurno: c.retirosTotal,
-        fichas: null, mensajes: c.mensajesEnviados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
+        fichas: null, ventasPorPlataforma: { B: c.porPlataforma.B.ventas, G: c.porPlataforma.G.ventas }, premiosPorPlataforma: { B: c.porPlataforma.B.premios, G: c.porPlataforma.G.premios },
+        mensajes: c.mensajesEnviados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: (last.movs || []).length, opsCount: (last.ops || []).length,
       };
     }
@@ -177,8 +185,8 @@ export default function AdminDashboard({ onExit }) {
             const secsAgo = Math.floor((Date.now() - new Date(s.updated_at).getTime()) / 1000);
             const stale = secsAgo > 180;
             const agoLabel = secsAgo < 60 ? `hace ${secsAgo}s` : `hace ${Math.floor(secsAgo / 60)} min`;
-            let ventasTotal = 0, retirosTotal = 0;
-            (s.ops || []).forEach((o) => { if (o.tipo === "carga") ventasTotal += num(o.monto); else retirosTotal += num(o.monto); });
+            const c = computeShift(s);
+            const isOpen = expanded === s.id;
             return (
               <Card
                 key={s.id}
@@ -189,7 +197,7 @@ export default function AdminDashboard({ onExit }) {
                   ? <span className="text-[9px] bg-amber-500/15 text-amber-400 rounded-full px-2 py-0.5 font-bold flex items-center gap-1"><AlertTriangle size={10} /> SIN ACTIVIDAD</span>
                   : <span className="text-[9px] bg-emerald-500/15 text-emerald-400 rounded-full px-2 py-0.5 font-bold animate-pulse">EN VIVO</span>}
               >
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2 mb-2">
                   <div className="bg-white/5 rounded-lg p-2 text-center">
                     <p className="text-[9px] text-slate-500 uppercase">Operaciones</p>
                     <p className="text-lg font-black">{(s.ops || []).length}</p>
@@ -200,9 +208,32 @@ export default function AdminDashboard({ onExit }) {
                   </div>
                   <div className="bg-white/5 rounded-lg p-2 text-center">
                     <p className="text-[9px] text-slate-500 uppercase">Vendido</p>
-                    <p className="text-lg font-black text-emerald-400">{money(ventasTotal)}</p>
+                    <p className="text-lg font-black text-emerald-400">{money(c.ventasTotal)}</p>
                   </div>
                 </div>
+                <button onClick={() => setExpanded(isOpen ? null : s.id)} className="text-[10px] text-indigo-300 font-bold flex items-center gap-1">
+                  {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {isOpen ? "Ocultar detalle" : "Entrar al turno — ver detalle"}
+                </button>
+                {isOpen && (
+                  <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
+                    <PlataformaBreakdown porPlataforma={c.porPlataforma} />
+                    <p className="text-slate-400 text-[11px]">Nuevos: {c.nuevos} · Derivados: {c.derivados} · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
+                    <div>
+                      <p className="text-slate-500 mb-1.5 font-semibold text-[11px]">Hoja de operaciones ({(s.ops || []).length})</p>
+                      <OpsTable ops={s.ops} />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(`¿Borrar este turno de ${s.responsable}? Es para sacar pruebas viejas o turnos que quedaron trabados. No se puede deshacer.`)) return;
+                        await supabase.from("shifts").delete().eq("id", s.id);
+                        setExpanded(null); loadAll();
+                      }}
+                      className="text-rose-400 text-[11px] font-bold flex items-center gap-1"
+                    >
+                      <X size={12} /> Borrar este turno (prueba / quedó trabado)
+                    </button>
+                  </div>
+                )}
               </Card>
             );
           })}
@@ -229,6 +260,17 @@ export default function AdminDashboard({ onExit }) {
                   <p className="text-base font-black text-rose-400">{money(ahoraMismo.premiosTurno)}</p>
                 </div>
               </div>
+              {ahoraMismo.ventasPorPlataforma && (
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  {PLATFORMS.map((p) => (
+                    <div key={p.key} className="bg-white/5 rounded-lg p-2 text-[10px]">
+                      <p className="text-slate-500 uppercase font-bold mb-1">{p.label}</p>
+                      <div className="flex justify-between"><span className="text-slate-500">Vendido</span><span className="font-bold text-emerald-400">{money(ahoraMismo.ventasPorPlataforma[p.key])}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Premios</span><span className="font-bold text-rose-400">{money(ahoraMismo.premiosPorPlataforma[p.key])}</span></div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {ahoraMismo.fichas && (
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   {PLATFORMS.map((p) => (
@@ -270,7 +312,11 @@ export default function AdminDashboard({ onExit }) {
         <>
           <h3 className="font-bold text-sm mb-2 text-slate-400">Detalle de turnos ({shifts.length})</h3>
           {computed.map((c) => (
-            <ShiftRow key={c.shift.id} c={c} expanded={expanded === c.shift.id} onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)} />
+            <ShiftRow
+              key={c.shift.id} c={c} expanded={expanded === c.shift.id}
+              onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
+              onDelete={async (id) => { await supabase.from("shifts").delete().eq("id", id); setExpanded(null); loadAll(); }}
+            />
           ))}
         </>
       )}
@@ -282,7 +328,53 @@ export default function AdminDashboard({ onExit }) {
   );
 }
 
-function ShiftRow({ c, expanded, onToggle }) {
+function OpsTable({ ops }) {
+  if (!ops || !ops.length) return <p className="text-slate-600 italic text-[10px]">Sin operaciones cargadas en este turno.</p>;
+  return (
+    <div className="max-h-96 overflow-y-auto rounded-lg ring-1 ring-white/5">
+      <table className="w-full text-[10px]">
+        <thead className="sticky top-0 bg-slate-900">
+          <tr className="text-slate-500 text-left">
+            <th className="py-1.5 px-2 font-semibold">#</th>
+            <th className="py-1.5 px-2 font-semibold">Plataforma</th>
+            <th className="py-1.5 px-2 font-semibold">Tipo</th>
+            <th className="py-1.5 px-2 font-semibold text-right">Monto</th>
+            <th className="py-1.5 px-2 font-semibold text-right">Bono</th>
+            <th className="py-1.5 px-2 font-semibold">Origen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ops.map((o, i) => (
+            <tr key={o.id || i} className="border-t border-white/5">
+              <td className="py-1.5 px-2 text-slate-600">{i + 1}</td>
+              <td className="py-1.5 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
+              <td className={`py-1.5 px-2 font-bold ${o.tipo === "carga" ? "text-emerald-400" : "text-rose-400"}`}>{o.tipo === "carga" ? "Venta" : "Premio"}</td>
+              <td className="py-1.5 px-2 text-right">{money(num(o.monto))}</td>
+              <td className="py-1.5 px-2 text-right text-slate-500">{o.bono ? money(num(o.bono)) : "—"}</td>
+              <td className="py-1.5 px-2 text-slate-400">{o.origen || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PlataformaBreakdown({ porPlataforma }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {PLATFORMS.map((p) => (
+        <div key={p.key} className="bg-white/5 rounded-lg p-2 text-[10px]">
+          <p className="text-slate-500 uppercase font-bold mb-1">{p.label}</p>
+          <div className="flex justify-between"><span className="text-slate-500">Vendido</span><span className="font-bold text-emerald-400">{money(porPlataforma[p.key].ventas)}</span></div>
+          <div className="flex justify-between"><span className="text-slate-500">Premios</span><span className="font-bold text-rose-400">{money(porPlataforma[p.key].premios)}</span></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ShiftRow({ c, expanded, onToggle, onDelete }) {
   const s = c.shift;
   const ok = Math.abs(c.diffEfectivo) < 1;
   return (
@@ -299,14 +391,51 @@ function ShiftRow({ c, expanded, onToggle }) {
       </button>
       {expanded && (
         <div className="px-3.5 pb-4 pt-1 border-t border-white/5 text-xs space-y-3">
+          <PlataformaBreakdown porPlataforma={c.porPlataforma} />
           <p className="text-slate-400">Nuevos: {c.nuevos} · Derivados: {c.derivados} · De la lista: {c.cargasLista} ({money(c.montoLista)}) · Mensajes: {c.mensajesEnviados}</p>
+          <div>
+            <p className="text-slate-500 mb-1 font-semibold">Billeteras — inicio → cierre</p>
+            <div className="grid grid-cols-2 gap-1">
+              {Object.keys({ ...(s.bill_inicio || {}), ...(s.bill_cierre || {}) }).map((w) => (
+                <p key={w} className="text-slate-400 flex justify-between bg-black/20 rounded px-2 py-1">
+                  <span>{w}</span><span>{money(num((s.bill_inicio || {})[w]))} → <b className="text-slate-200">{money(num((s.bill_cierre || {})[w]))}</b></span>
+                </p>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-slate-500 mb-1 font-semibold">Fichas — inicio → cierre</p>
+            <div className="grid grid-cols-2 gap-1">
+              {PLATFORMS.map((p) => (
+                <p key={p.key} className="text-slate-400 flex justify-between bg-black/20 rounded px-2 py-1">
+                  <span>{p.label}</span><span>{money(num((s.stock_inicio || {})[p.key]))} → <b className="text-slate-200">{money(num((s.stock_cierre || {})[p.key]))}</b></span>
+                </p>
+              ))}
+            </div>
+          </div>
           {(s.bajadas || []).length > 0 && (
             <div>
               <p className="text-slate-500 mb-1 font-semibold">Bajadas ({s.bajadas.length})</p>
               {s.bajadas.map((b, i) => (<p key={i} className="text-slate-400">{b.billetera} — {money(num(b.monto))} → {b.destino || "sin destino"} {b.nota && `· ${b.nota}`}</p>))}
             </div>
           )}
+          {(s.movs || []).length > 0 && (
+            <div>
+              <p className="text-slate-500 mb-1 font-semibold">Movimientos ({s.movs.length})</p>
+              {s.movs.map((m, i) => (<p key={i} className="text-slate-400">{m.tipo} · {m.plataforma} · {money(num(m.monto))} {m.nota && `· ${m.nota}`}</p>))}
+            </div>
+          )}
           {s.notas && <div><p className="text-slate-500 mb-1 font-semibold">Notas</p><p className="italic text-slate-300">{s.notas}</p></div>}
+          <div>
+            <p className="text-slate-500 mb-1.5 font-semibold">Hoja de operaciones ({(s.ops || []).length})</p>
+            <OpsTable ops={s.ops} />
+          </div>
+          <button
+            onClick={() => { if (window.confirm(`¿Borrar este turno de ${s.responsable} (${s.fecha}) para siempre? Esto no se puede deshacer.`)) onDelete(s.id); }}
+            className="text-rose-400 text-[11px] font-bold flex items-center gap-1 mt-1"
+          >
+            <X size={12} /> Borrar este turno (prueba / error de carga)
+          </button>
         </div>
       )}
     </div>
