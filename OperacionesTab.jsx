@@ -56,7 +56,7 @@ export default function OperacionesTab({ draft }) {
 
       <div className="space-y-1.5">
         {ops.map((o, i) => (
-          <OpRow key={o.id} o={o} onUpdate={(patch) => updateOp(o.id, patch, i)} onRemove={() => removeOp(o.id)} />
+          <OpRow key={o.id} o={o} index={i} onUpdate={(patch) => updateOp(o.id, patch, i)} onRemove={() => removeOp(o.id)} />
         ))}
       </div>
     </div>
@@ -72,8 +72,14 @@ function Field({ label, children }) {
   );
 }
 
-function OpRow({ o, onUpdate, onRemove }) {
+function OpRow({ o, index, onUpdate, onRemove }) {
   const hasData = o.monto !== "";
+  function focusNext() {
+    // Enter en el monto pasa directo al monto de la fila siguiente, así se puede
+    // cargar operación tras operación sin tocar la pantalla.
+    const next = document.querySelector(`[data-monto-idx="${index + 1}"]`);
+    if (next) next.focus();
+  }
   return (
     <div className="flex items-center gap-1.5 bg-white/[0.02] ring-1 ring-white/5 rounded-xl px-2 py-1.5">
       <div className="flex gap-0.5">
@@ -87,7 +93,13 @@ function OpRow({ o, onUpdate, onRemove }) {
         ))}
       </div>
       <div className="flex-1 min-w-0">
-        <input inputMode="numeric" placeholder="Monto" value={o.monto} onChange={(e) => onUpdate({ monto: e.target.value })} className="input !py-1.5 text-xs" />
+        <input
+          inputMode="numeric" placeholder="Monto" value={o.monto}
+          data-monto-idx={index}
+          onChange={(e) => onUpdate({ monto: e.target.value })}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNext(); } }}
+          className="input !py-1.5 text-xs"
+        />
       </div>
       {o.tipo === "carga" && (
         <div className="flex-1 min-w-0">
