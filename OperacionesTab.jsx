@@ -1,9 +1,22 @@
 import React from "react";
-import { X } from "lucide-react";
+import { X, Lock } from "lucide-react";
+import { Card } from "./ui";
 import { PLATFORMS, num, money, blankOp, seedOps, GROW_BATCH } from "./lib";
 
 export default function OperacionesTab({ draft }) {
-  const { ops, setOps, mensajesEnviados, setMensajesEnviados, expected } = draft;
+  const { ops, setOps, mensajesEnviados, setMensajesEnviados, expected, otherOpenBy } = draft;
+
+  if (otherOpenBy) {
+    return (
+      <div className="pt-5">
+        <Card icon={<Lock size={15} />} title="El turno ya está abierto" subtitle={`A cargo de ${otherOpenBy.nombre}`}>
+          <p className="text-sm text-slate-300">
+            Las operaciones se cargan desde la caja de <b>{otherOpenBy.nombre}</b>, que ya está activa. Pedile que las cargue él, o esperá a que cierre el turno.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   function updateOp(id, patch, index) {
     const next = ops.map((o) => (o.id === id ? { ...o, ...patch } : o));
