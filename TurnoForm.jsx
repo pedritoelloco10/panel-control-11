@@ -1,13 +1,23 @@
-import React from "react";
-import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus } from "lucide-react";
-import { Card, Field, Badge } from "./ui";
-import { PLATFORMS, num, money, classifyTurno, uid } from "./lib";
-
 export default function TurnoForm({ wallets, draft, identity, goOps }) {
   const { meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
-    expected, cierreCheck, saving, error, saved, submitTurno, opsFilledCount, carriedFrom } = draft;
+    expected, cierreCheck, saving, error, saved, submitTurno, opsFilledCount, carriedFrom, otherOpenBy } = draft;
+
+  if (otherOpenBy) {
+    return (
+      <div className="pt-5">
+        <Card icon={<Lock size={15} />} title="El turno ya está abierto" subtitle={`A cargo de ${otherOpenBy.nombre}`}>
+          <p className="text-sm text-slate-300 mb-2">
+            <b>{otherOpenBy.nombre}</b> ya tiene la caja abierta desde las {otherOpenBy.hora?.slice(0, 5)}. Para que la plata no quede pisada por dos personas a la vez, no se abre otra caja mientras esta siga activa.
+          </p>
+          <p className="text-sm text-slate-400">
+            Podés seguir trabajando desde la pestaña <b>Bases</b> normalmente — eso no depende del turno. Cuando {otherOpenBy.nombre} cierre, avisale que anote el saldo final de las billeteras antes de cerrar.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-5">
