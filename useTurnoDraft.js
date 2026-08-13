@@ -10,6 +10,9 @@ export function useTurnoDraft(identity) {
   const [shiftId, setShiftId] = useState(null);
   const [ready, setReady] = useState(false);
   const [carriedFrom, setCarriedFrom] = useState(null);
+  // Si ya hay un turno abierto a nombre de OTRA persona, no se abre uno nuevo:
+  // guarda quién lo tiene abierto para avisarle al resto en vez de duplicar la caja.
+  const [otherOpenBy, setOtherOpenBy] = useState(null);
 
   const [meta, setMeta] = useState({ fecha: todayStr(), horaInicio: nowStr(), horaFin: "", responsable: "" });
   const [billInicio, setBillInicio] = useState({});
@@ -34,6 +37,7 @@ export function useTurnoDraft(identity) {
     let cancelled = false;
     (async () => {
       setReady(false);
+      setOtherOpenBy(null);
       const { data: mine } = await supabase
         .from("shifts").select("*").eq("status", "abierto").eq("responsable", identity.nombre)
         .order("created_at", { ascending: false }).limit(1);
@@ -47,6 +51,18 @@ export function useTurnoDraft(identity) {
         setOps((s.ops && s.ops.length ? s.ops : seedOps(SEED_ROWS)));
         setBajadas(s.bajadas || []); setMovs(s.movs || []); setNotas(s.notas || "");
         setMensajesEnviados(String(s.mensajes_enviados || ""));
+        setReady(true);
+        return;
+      }
+      // No tengo turno propio abierto. Antes de crear uno, me fijo si YA hay un turno
+      // abierto a nombre de otra persona: si lo hay, no creo uno nuevo (evita duplicar
+      // la caja y que dos personas escriban el mismo turno a la vez).
+      const { data: anyOpen } = await supabase
+        .from("shifts").select("*").eq("status", "abierto")
+        .order("created_at", { ascending: false }).limit(1);
+      if (cancelled) return;
+      if (anyOpen && anyOpen.length) {
+        setOtherOpenBy({ nombre: anyOpen[0].responsable, hora: anyOpen[0].hora_inicio });
         setReady(true);
         return;
       }
@@ -156,7 +172,7 @@ export function useTurnoDraft(identity) {
   }
 
   return {
-    ready, carriedFrom, meta, setMeta, billInicio, billCierre, setBillCierre,
+    ready, carriedFrom, otherOpenBy, meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf, ops, setOps,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
     mensajesEnviados, setMensajesEnviados, expected, cierreCheck,
