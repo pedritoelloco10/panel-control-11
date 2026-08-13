@@ -105,9 +105,20 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
 
       <Card icon={<Wallet size={15} />} title="Billeteras — cierre">
         <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto -mx-1 px-1">
-          {wallets.map((w) => (
+          {wallets.map((w, i) => (
             <Field key={w} label={w}>
-              <input inputMode="numeric" value={billCierre[w] || ""} onChange={(e) => setBillCierre({ ...billCierre, [w]: e.target.value })} placeholder="0" className="input" />
+              <input
+                inputMode="numeric" value={billCierre[w] || ""}
+                data-cierre-idx={i}
+                onChange={(e) => setBillCierre({ ...billCierre, [w]: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const next = document.querySelector(`[data-cierre-idx="${i + 1}"]`);
+                  if (next) next.focus();
+                }}
+                placeholder="0" className="input"
+              />
             </Field>
           ))}
         </div>
