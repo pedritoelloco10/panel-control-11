@@ -77,9 +77,16 @@ export default function AdminDashboard({ onExit }) {
 
   useEffect(() => {
     loadAll();
-    const interval = setInterval(loadAll, 6000); // se refresca solo, así ves todo en vivo
-    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    // El refresco automático solo corre en la pestaña "Vivo".
+    // En las demás pestañas (billeteras, empleados, bases, etc.) no refrescamos
+    // solo, para no pisar lo que el admin está escribiendo en un formulario.
+    if (tab !== "vivo") return;
+    const interval = setInterval(loadAll, 6000);
+    return () => clearInterval(interval);
+  }, [tab]);
 
   const computed = useMemo(() => shifts.map(computeShift), [shifts]);
 
