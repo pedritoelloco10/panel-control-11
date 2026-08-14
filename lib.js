@@ -3,7 +3,6 @@ export const PLATFORMS = [
   { key: "G", label: "GANA" },
 ];
 export const DB_TYPES = { general: "General", reactivacion: "Reactivación 7+ días", comprada: "Base comprada" };
-export const ADMIN_PIN = "2580";
 export const SEED_ROWS = 15;
 export const GROW_BATCH = 8;
 
