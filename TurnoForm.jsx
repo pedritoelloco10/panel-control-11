@@ -86,8 +86,8 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
           fields={[
             { key: "billetera", type: "select", options: ["(otro)"], placeholder: "Billetera" },
             { key: "monto", type: "text", placeholder: "Monto", numeric: true },
-            { key: "destino", type: "text", placeholder: "Destino (a quién / para qué)" },
-            { key: "nota", type: "text", placeholder: "Nota" },
+            { key: "destino", type: "select", options: ["Efectivo (ganancia)", "Compra de fichas", "Gasto de oficina"], placeholder: "Destino" },
+            { key: "nota", type: "text", placeholder: "Nota (si es gasto, detallar en qué)" },
           ]}
           wallets={wallets}
         />
