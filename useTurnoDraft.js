@@ -39,7 +39,7 @@ export function useTurnoDraft(identity) {
       setReady(false);
       setOtherOpenBy(null);
       const { data: mine } = await supabase
-        .from("shifts").select("*").eq("status", "abierto").eq("responsable", identity.nombre)
+        .from("shifts").select("*").eq("status", "abierto").eq("archivado", false).eq("responsable", identity.nombre)
         .order("created_at", { ascending: false }).limit(1);
       if (cancelled) return;
       if (mine && mine.length) {
@@ -58,7 +58,7 @@ export function useTurnoDraft(identity) {
       // abierto a nombre de otra persona: si lo hay, no creo uno nuevo (evita duplicar
       // la caja y que dos personas escriban el mismo turno a la vez).
       const { data: anyOpen } = await supabase
-        .from("shifts").select("*").eq("status", "abierto")
+        .from("shifts").select("*").eq("status", "abierto").eq("archivado", false)
         .order("created_at", { ascending: false }).limit(1);
       if (cancelled) return;
       if (anyOpen && anyOpen.length) {
