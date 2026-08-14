@@ -58,7 +58,7 @@ function computeShift(shift) {
   };
 }
 
-export default function AdminDashboard({ onExit }) {
+export default function AdminDashboard({ adminPin, onExit }) {
   const [tab, setTab] = useState("resumen");
   const [shifts, setShifts] = useState([]);
   const [liveShifts, setLiveShifts] = useState([]);
@@ -80,9 +80,9 @@ export default function AdminDashboard({ onExit }) {
   async function loadAll() {
     setLoading(true);
     const [{ data: closedShifts }, { data: live }, { data: emp }, { data: wal }, { data: dbList }] = await Promise.all([
-      supabase.from("shifts").select("*").eq("status", "cerrado").order("created_at", { ascending: false }),
-      supabase.from("shifts").select("*").eq("status", "abierto").order("updated_at", { ascending: false }),
-      supabase.from("employees").select("*").order("created_at"),
+      supabase.from("shifts").select("*").eq("status", "cerrado").eq("archivado", false).order("created_at", { ascending: false }),
+      supabase.from("shifts").select("*").eq("status", "abierto").eq("archivado", false).order("updated_at", { ascending: false }),
+      supabase.rpc("admin_list_employees", { input_admin_pin: adminPin }),
       supabase.from("wallets").select("*").order("orden"),
       supabase.from("databases").select("*").order("created_at", { ascending: false }),
     ]);
@@ -317,18 +317,18 @@ export default function AdminDashboard({ onExit }) {
           )}
 
           {liveShifts.length > 0 && (
-            <Card icon={<Sparkles size={15} />} title="Turno abierto" subtitle="Si quedó trabado de una prueba, lo podés borrar acá">
+            <Card icon={<Sparkles size={15} />} title="Turno abierto" subtitle="Si quedó trabado de una prueba, lo podés archivar acá">
               {liveShifts.map((s) => (
                 <div key={s.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0 text-xs">
                   <span className="text-slate-300">{s.responsable} · desde {s.hora_inicio}</span>
                   <button
                     onClick={async () => {
-                      if (!window.confirm(`¿Borrar el turno abierto de ${s.responsable}? Es para pruebas viejas o turnos trabados. No se puede deshacer.`)) return;
-                      await supabase.from("shifts").delete().eq("id", s.id); loadAll();
+                      if (!window.confirm(`¿Archivar el turno abierto de ${s.responsable}? Es para pruebas viejas o turnos trabados. Queda guardado, no se pierde, pero se libera la caja para abrir uno nuevo.`)) return;
+                      await supabase.from("shifts").update({ archivado: true }).eq("id", s.id); loadAll();
                     }}
                     className="text-rose-400 text-[10px] font-bold flex items-center gap-1"
                   >
-                    <X size={12} /> Borrar
+                    <X size={12} /> Archivar
                   </button>
                 </div>
               ))}
@@ -419,7 +419,7 @@ export default function AdminDashboard({ onExit }) {
             <ShiftRow
               key={c.shift.id} c={c} expanded={expanded === c.shift.id}
               onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
-              onDelete={async (id) => { await supabase.from("shifts").delete().eq("id", id); setExpanded(null); loadAll(); }}
+              onDelete={async (id) => { await supabase.from("shifts").update({ archivado: true }).eq("id", id); setExpanded(null); loadAll(); }}
               onOpenOps={setOpsModal}
             />
           ))}
@@ -427,7 +427,7 @@ export default function AdminDashboard({ onExit }) {
       )}
 
       {tab === "bases" && <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} onChange={loadAll} />}
-      {tab === "empleados" && <EmployeeManager employees={employees} onChange={loadAll} />}
+      {tab === "empleados" && <EmployeeManager employees={employees} adminPin={adminPin} onChange={loadAll} />}
       {tab === "billeteras" && <WalletManager wallets={wallets} onChange={loadAll} />}
       <OpsSheetModal data={opsModal} onClose={() => setOpsModal(null)} />
     </div>
@@ -616,10 +616,10 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
             </button>
           </div>
           <button
-            onClick={() => { if (window.confirm(`¿Borrar este turno de ${s.responsable} (${s.fecha}) para siempre? Esto no se puede deshacer.`)) onDelete(s.id); }}
+            onClick={() => { if (window.confirm(`¿Archivar este turno de ${s.responsable} (${s.fecha})? Deja de aparecer en las listas, pero queda guardado — no se pierde.`)) onDelete(s.id); }}
             className="text-rose-400 text-[11px] font-bold flex items-center gap-1 mt-1"
           >
-            <X size={12} /> Borrar este turno (prueba / error de carga)
+            <X size={12} /> Archivar este turno (prueba / error de carga)
           </button>
         </div>
       )}
@@ -627,7 +627,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
   );
 }
 
-function EmployeeManager({ employees, onChange }) {
+function EmployeeManager({ employees, adminPin, onChange }) {
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState("");
   const [editPin, setEditPin] = useState("");
@@ -637,20 +637,24 @@ function EmployeeManager({ employees, onChange }) {
   function startEdit(e) { setEditing(e.id); setEditName(e.nombre); setEditPin(e.pin); }
   async function commitEdit() {
     if (!editName.trim() || editPin.length !== 4) return;
-    await supabase.from("employees").update({ nombre: editName.trim(), pin: editPin }).eq("id", editing);
+    await supabase.rpc("admin_update_employee", { input_admin_pin: adminPin, target_id: editing, new_nombre: editName.trim(), new_pin: editPin });
     setEditing(null); onChange();
   }
-  async function remove(id) { await supabase.from("employees").delete().eq("id", id); onChange(); }
+  async function remove(id) {
+    if (!window.confirm("¿Dar de baja a este empleado? Su PIN deja de funcionar, pero su historial de turnos pasados queda intacto.")) return;
+    await supabase.rpc("admin_deactivate_employee", { input_admin_pin: adminPin, target_id: id });
+    onChange();
+  }
   async function add() {
     if (!newName.trim() || newPin.length !== 4) return;
-    await supabase.from("employees").insert({ nombre: newName.trim(), pin: newPin });
+    await supabase.rpc("admin_add_employee", { input_admin_pin: adminPin, new_nombre: newName.trim(), new_pin: newPin });
     setNewName(""); setNewPin(""); onChange();
   }
 
   return (
-    <Card icon={<Users size={15} />} title="Empleados y PIN" subtitle={`${employees.length} personas`}>
+    <Card icon={<Users size={15} />} title="Empleados y PIN" subtitle={`${employees.filter((e) => e.activo).length} personas`}>
       <div className="space-y-1.5 mb-3">
-        {employees.map((e) => (
+        {employees.filter((e) => e.activo).map((e) => (
           <div key={e.id} className="flex items-center gap-2 bg-black/20 rounded-lg px-3 py-2">
             {editing === e.id ? (
               <>
@@ -818,7 +822,7 @@ function BasesAdmin({ employees, dbs, dbStats, onChange }) {
         <div className="grid grid-cols-2 gap-1.5 mb-1.5">
           <select value={empId} onChange={(e) => setEmpId(e.target.value)} className="input !py-1.5 text-xs">
             <option value="">Empleado</option>
-            {employees.map((e) => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
+            {employees.filter((e) => e.activo).map((e) => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
           </select>
           <select value={baseId} onChange={(e) => setBaseId(e.target.value)} className="input !py-1.5 text-xs">
             <option value="">Base</option>
