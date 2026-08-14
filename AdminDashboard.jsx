@@ -27,11 +27,18 @@ function computeShift(shift) {
   });
   const bonoTotal = porPlataforma.B.bono + porPlataforma.G.bono;
   const bajadasTotal = (shift.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
+  const bajadasFichas = (shift.bajadas || []).filter((b) => b.destino === "Compra de fichas").reduce((s, b) => s + num(b.monto), 0);
+  const bajadasGasto = (shift.bajadas || []).filter((b) => b.destino === "Gasto de oficina").reduce((s, b) => s + num(b.monto), 0);
+  const bajadasEfectivo = (shift.bajadas || []).filter((b) => b.destino !== "Compra de fichas" && b.destino !== "Gasto de oficina").reduce((s, b) => s + num(b.monto), 0);
+  const gastosDetalle = (shift.bajadas || []).filter((b) => b.destino === "Gasto de oficina");
   const billInicioTotal = Object.values(shift.bill_inicio || {}).reduce((s, v) => s + num(v), 0);
   const billCierreTotal = Object.values(shift.bill_cierre || {}).reduce((s, v) => s + num(v), 0);
   const efectivoEsperado = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal;
   const diffEfectivo = billCierreTotal - efectivoEsperado;
-  const netoCaja = ventasTotal - retirosTotal - bajadasTotal;
+  // Neto = ganancia real del turno: lo que entró por cargas menos lo que salió en premios.
+  // Las bajadas (a efectivo, a fichas, o a un gasto) son solo información de a dónde fue esa
+  // plata — nunca se restan del Neto.
+  const netoCaja = ventasTotal - retirosTotal;
   const mensajesEnviados = num(shift.mensajes_enviados);
   const movimientosCount = (shift.movs || []).length;
   // Diferencia de fichas: lo esperado (arrastre + cargas/bono/retiros/movimientos) contra lo informado al cierre.
@@ -45,7 +52,7 @@ function computeShift(shift) {
   });
   const hasError = Math.abs(diffEfectivo) >= 1 || Object.values(diffFichas).some((d) => d !== null && Math.abs(d) >= 1);
   return {
-    shift, ventasTotal, retirosTotal, bajadasTotal, netoCaja, bonoTotal, diffEfectivo, diffFichas, hasError,
+    shift, ventasTotal, retirosTotal, bajadasTotal, bajadasFichas, bajadasEfectivo, bajadasGasto, gastosDetalle, netoCaja, bonoTotal, diffEfectivo, diffFichas, hasError,
     nuevos, derivados, cargasLista, montoLista, cargasCount, retirosCount, mensajesEnviados, movimientosCount,
     opsCount: (shift.ops || []).length, porPlataforma,
   };
@@ -60,6 +67,7 @@ export default function AdminDashboard({ onExit }) {
   const [dbs, setDbs] = useState([]);
   const [dbStats, setDbStats] = useState({});
   const [empTodayBaseStats, setEmpTodayBaseStats] = useState({});
+  const [workedContacts, setWorkedContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [rangeKey, setRangeKey] = useState("7d");
@@ -67,6 +75,7 @@ export default function AdminDashboard({ onExit }) {
   const [dateTo, setDateTo] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [opsModal, setOpsModal] = useState(null);
 
   async function loadAll() {
     setLoading(true);
@@ -83,13 +92,16 @@ export default function AdminDashboard({ onExit }) {
     setWallets(wal || []);
     setDbs(dbList || []);
 
-    const stats = {}; const empStats = {};
+    const stats = {}; const empStats = {}; const worked = [];
     for (const d of (dbList || [])) {
       const { data: contacts } = await supabase.from("contacts").select("*").eq("base_id", d.id);
       const cs = contacts || [];
       const agregadosPorEmpleado = cs.filter((c) => c.agregado_por && c.agregado_por !== "admin");
       stats[d.id] = { total: cs.length, enviados: cs.filter((c) => c.enviado).length, contestados: cs.filter((c) => c.contestado).length, cargaron: cs.filter((c) => c.cargo).length, agregadosPorEmpleado };
       cs.forEach((c) => {
+        if (c.fecha_trabajo && c.trabajada_por) {
+          worked.push({ trabajada_por: c.trabajada_por, fecha: c.fecha_trabajo, enviado: !!c.enviado, contestado: !!c.contestado, cargo: !!c.cargo });
+        }
         if (c.fecha_trabajo === todayStr() && c.trabajada_por) {
           if (!empStats[c.trabajada_por]) empStats[c.trabajada_por] = { contestados: 0, cargaron: 0 };
           if (c.contestado) empStats[c.trabajada_por].contestados++;
@@ -97,7 +109,7 @@ export default function AdminDashboard({ onExit }) {
         }
       });
     }
-    setDbStats(stats); setEmpTodayBaseStats(empStats);
+    setDbStats(stats); setEmpTodayBaseStats(empStats); setWorkedContacts(worked);
     setLoading(false);
     setLastUpdated(new Date());
   }
@@ -134,8 +146,8 @@ export default function AdminDashboard({ onExit }) {
   const computed = useMemo(() => filteredShifts.map(computeShift), [filteredShifts]);
 
   const totals = useMemo(() => {
-    const t = { ventas: 0, retiros: 0, bajadas: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0 };
-    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; });
+    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0 };
+    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; });
     return t;
   }, [computed]);
 
@@ -145,17 +157,33 @@ export default function AdminDashboard({ onExit }) {
     return t;
   }, [computed]);
 
+  const gastosList = useMemo(() => {
+    const list = [];
+    computed.forEach((c) => {
+      c.gastosDetalle.forEach((g) => list.push({ fecha: c.shift.fecha, responsable: c.shift.responsable, nota: g.nota, monto: num(g.monto) }));
+    });
+    return list.sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  }, [computed]);
+
   const byEmployee = useMemo(() => {
     const map = {};
     computed.forEach((c) => {
       const r = c.shift.responsable;
-      if (!map[r]) map[r] = { turnos: 0, mensajes: 0, movimientos: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
+      if (!map[r]) map[r] = { turnos: 0, mensajes: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
       const e = map[r];
-      e.turnos++; e.mensajes += c.mensajesEnviados; e.movimientos += c.movimientosCount; e.cargas += c.cargasCount; e.retiros += c.retirosCount;
+      e.turnos++; e.mensajes += c.mensajesEnviados; e.cargas += c.cargasCount; e.retiros += c.retirosCount;
       if (c.hasError) { e.errores++; e.diffEfectivoTotal += Math.abs(c.diffEfectivo); PLATFORMS.forEach((p) => { if (c.diffFichas[p.key] !== null) e.diffFichas[p.key] += Math.abs(c.diffFichas[p.key]); }); }
     });
+    workedContacts.forEach((w) => {
+      if (dateFrom && w.fecha < dateFrom) return;
+      if (dateTo && w.fecha > dateTo) return;
+      if (!map[w.trabajada_por]) map[w.trabajada_por] = { turnos: 0, mensajes: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
+      const e = map[w.trabajada_por];
+      if (w.contestado) e.contestaron++;
+      if (w.cargo) e.cargaron++;
+    });
     return Object.entries(map).sort((a, b) => b[1].turnos - a[1].turnos);
-  }, [computed]);
+  }, [computed, workedContacts, dateFrom, dateTo]);
 
   const byTurno = useMemo(() => {
     const map = { Mañana: { ventas: 0, neto: 0, count: 0 }, Tarde: { ventas: 0, neto: 0, count: 0 }, Noche: { ventas: 0, neto: 0, count: 0 } };
@@ -191,7 +219,7 @@ export default function AdminDashboard({ onExit }) {
       return {
         enVivo: true, responsable: live.responsable, cajaTotal, ventasTurno: ventasTotal, premiosTurno: retirosTotal, fichas, porPlataforma,
         mensajes: num(live.mensajes_enviados), contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
-        movimientos: (live.movs || []).length, opsCount: (live.ops || []).length, horaInicio: live.hora_inicio,
+        movimientos: (live.movs || []).length, opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
       };
     }
     if (shifts.length) {
@@ -202,7 +230,7 @@ export default function AdminDashboard({ onExit }) {
         enVivo: false, responsable: last.responsable, cajaTotal: billCierreTotal, ventasTurno: c.ventasTotal, premiosTurno: c.retirosTotal,
         fichas: null, porPlataforma: c.porPlataforma,
         mensajes: c.mensajesEnviados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
-        movimientos: (last.movs || []).length, opsCount: (last.ops || []).length,
+        movimientos: (last.movs || []).length, opsCount: (last.ops || []).length, ops: last.ops || [],
       };
     }
     return null;
@@ -260,10 +288,13 @@ export default function AdminDashboard({ onExit }) {
                   <p className="text-[9px] text-slate-500 uppercase">Premios</p>
                   <p className="text-base font-black text-rose-400">{money(ahoraMismo.premiosTurno)}</p>
                 </div>
-                <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                <button
+                  onClick={() => setOpsModal({ title: `${ahoraMismo.responsable} · ${ahoraMismo.enVivo ? "en vivo" : "último cierre"}`, ops: ahoraMismo.ops })}
+                  className="bg-white/5 rounded-lg p-2.5 text-center ring-1 ring-transparent hover:ring-indigo-400/40"
+                >
                   <p className="text-[9px] text-slate-500 uppercase">Operaciones</p>
-                  <p className="text-base font-black">{ahoraMismo.opsCount}</p>
-                </div>
+                  <p className="text-base font-black text-indigo-300 underline">{ahoraMismo.opsCount}</p>
+                </button>
               </div>
               <PlataformaBreakdown porPlataforma={ahoraMismo.porPlataforma} />
               {ahoraMismo.fichas && (
@@ -307,13 +338,41 @@ export default function AdminDashboard({ onExit }) {
           <DateRangeFilter rangeKey={rangeKey} dateFrom={dateFrom} dateTo={dateTo} onPreset={applyPreset} onFrom={(v) => { setRangeKey("custom"); setDateFrom(v); }} onTo={(v) => { setRangeKey("custom"); setDateTo(v); }} />
 
           <h3 className="font-bold text-sm mb-2 mt-4 text-slate-400">Análisis de totales ({computed.length} turnos)</h3>
-          <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="grid grid-cols-2 gap-2 mb-2">
             <StatBox label="Ventas totales" value={money(totals.ventas)} positive />
             <StatBox label="Retiros pagados" value={money(totals.retiros)} negative />
             <StatBox label="Bono dado" value={money(totals.bono)} />
-            <StatBox label="Bajadas" value={money(totals.bajadas)} />
-            <StatBox label="Neto" value={money(totals.neto)} positive={totals.neto >= 0} negative={totals.neto < 0} />
+            <StatBox label="Neto (ventas − premios)" value={money(totals.neto)} positive={totals.neto >= 0} negative={totals.neto < 0} />
           </div>
+          <Card icon={<TrendingUp size={15} className="rotate-180" />} title="Bajadas" subtitle="A dónde fue esa plata — no se resta del Neto">
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                <p className="text-[9px] text-slate-500 uppercase">Efectivo</p>
+                <p className="text-sm font-black">{money(totals.bajadasEfectivo)}</p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                <p className="text-[9px] text-slate-500 uppercase">Fichas</p>
+                <p className="text-sm font-black text-indigo-300">{money(totals.bajadasFichas)}</p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                <p className="text-[9px] text-slate-500 uppercase">Gastos</p>
+                <p className="text-sm font-black text-amber-400">{money(totals.bajadasGasto)}</p>
+              </div>
+            </div>
+            {gastosList.length > 0 && (
+              <div>
+                <p className="text-[10px] text-slate-500 font-semibold mb-1">Detalle de gastos ({gastosList.length})</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {gastosList.map((g, i) => (
+                    <div key={i} className="flex justify-between bg-black/20 rounded-lg px-2.5 py-1.5 text-[11px]">
+                      <span className="text-slate-400">{g.fecha} · {g.responsable} · {g.nota || "sin detalle"}</span>
+                      <span className="font-bold text-amber-400">{money(g.monto)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
           <Card icon={<TrendingUp size={15} />} title="Neto y bono por plataforma">
             <PlataformaBreakdown porPlataforma={totalsPorPlataforma} />
           </Card>
@@ -327,15 +386,18 @@ export default function AdminDashboard({ onExit }) {
             ))}
           </Card>
           <Card icon={<Users size={15} />} title="Estadísticas por empleado" subtitle="En el período seleccionado arriba">
-            {byEmployee.length === 0 && <p className="text-slate-600 text-xs italic">Sin turnos en este período.</p>}
+            {byEmployee.length === 0 && <p className="text-slate-600 text-xs italic">Sin turnos ni actividad en este período.</p>}
             {byEmployee.map(([nombre, e]) => (
               <div key={nombre} className="py-2.5 border-b border-white/5 last:border-0">
                 <p className="font-bold text-sm text-indigo-300 mb-1.5">{nombre} · {e.turnos} turno{e.turnos !== 1 ? "s" : ""}</p>
-                <div className="grid grid-cols-4 gap-1.5 text-center mb-1.5">
-                  <MiniStat label="Mensajes" value={e.mensajes} />
-                  <MiniStat label="Movimientos" value={e.movimientos} />
-                  <MiniStat label="Cargas" value={e.cargas} />
-                  <MiniStat label="Retiros" value={e.retiros} />
+                <div className="grid grid-cols-3 gap-1.5 text-center mb-1.5">
+                  <MiniStat label="Mensajes enviados" value={e.mensajes} />
+                  <MiniStat label="Contestaron" value={e.contestaron} />
+                  <MiniStat label="Cargaron (bases)" value={e.cargaron} />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-center mb-1.5">
+                  <MiniStat label="Cargas (operaciones)" value={e.cargas} />
+                  <MiniStat label="Retiros (operaciones)" value={e.retiros} />
                 </div>
                 {e.errores > 0 ? (
                   <div className="bg-amber-500/10 ring-1 ring-amber-500/20 rounded-lg px-2.5 py-1.5 text-[10px] text-amber-400">
@@ -358,6 +420,7 @@ export default function AdminDashboard({ onExit }) {
               key={c.shift.id} c={c} expanded={expanded === c.shift.id}
               onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
               onDelete={async (id) => { await supabase.from("shifts").delete().eq("id", id); setExpanded(null); loadAll(); }}
+              onOpenOps={setOpsModal}
             />
           ))}
         </>
@@ -366,6 +429,7 @@ export default function AdminDashboard({ onExit }) {
       {tab === "bases" && <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} onChange={loadAll} />}
       {tab === "empleados" && <EmployeeManager employees={employees} onChange={loadAll} />}
       {tab === "billeteras" && <WalletManager wallets={wallets} onChange={loadAll} />}
+      <OpsSheetModal data={opsModal} onClose={() => setOpsModal(null)} />
     </div>
   );
 }
@@ -390,6 +454,50 @@ function DateRangeFilter({ rangeKey, dateFrom, dateTo, onPreset, onFrom, onTo })
         <input type="date" value={dateFrom} onChange={(e) => onFrom(e.target.value)} className="input !py-1.5 text-[11px] flex-1" />
         <span className="text-slate-600 text-xs">a</span>
         <input type="date" value={dateTo} onChange={(e) => onTo(e.target.value)} className="input !py-1.5 text-[11px] flex-1" />
+      </div>
+    </div>
+  );
+}
+
+function OpsSheetModal({ data, onClose }) {
+  if (!data) return null;
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/97 overflow-y-auto">
+      <div className="max-w-3xl mx-auto p-4">
+        <div className="flex items-center justify-between mb-4 sticky top-0 bg-slate-950/97 pt-1 pb-2">
+          <div>
+            <h3 className="font-bold text-lg">Hoja de operaciones</h3>
+            <p className="text-slate-500 text-xs">{data.title} · {(data.ops || []).length} operaciones</p>
+          </div>
+          <button onClick={onClose} className="bg-white/5 ring-1 ring-white/10 rounded-lg p-2"><X size={16} /></button>
+        </div>
+        <table className="w-full text-xs">
+          <thead className="sticky top-14 bg-slate-900">
+            <tr className="text-slate-500 text-left">
+              <th className="py-2 px-2 font-semibold">#</th>
+              <th className="py-2 px-2 font-semibold">Plataforma</th>
+              <th className="py-2 px-2 font-semibold">Tipo</th>
+              <th className="py-2 px-2 font-semibold text-right">Monto</th>
+              <th className="py-2 px-2 font-semibold text-right">Bono</th>
+              <th className="py-2 px-2 font-semibold">Origen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.ops || []).length === 0 && (
+              <tr><td colSpan={6} className="py-6 text-center text-slate-600 italic">Sin operaciones cargadas en este turno.</td></tr>
+            )}
+            {(data.ops || []).map((o, i) => (
+              <tr key={o.id || i} className="border-t border-white/5">
+                <td className="py-2 px-2 text-slate-600">{i + 1}</td>
+                <td className="py-2 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
+                <td className={`py-2 px-2 font-bold ${o.tipo === "carga" ? "text-emerald-400" : "text-rose-400"}`}>{o.tipo === "carga" ? "Venta" : "Premio"}</td>
+                <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
+                <td className="py-2 px-2 text-right text-slate-500">{o.bono ? money(num(o.bono)) : "—"}</td>
+                <td className="py-2 px-2 text-slate-400">{o.origen || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -447,7 +555,7 @@ function PlataformaBreakdown({ porPlataforma }) {
   );
 }
 
-function ShiftRow({ c, expanded, onToggle, onDelete }) {
+function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
   const s = c.shift;
   const ok = !c.hasError;
   return (
@@ -500,8 +608,12 @@ function ShiftRow({ c, expanded, onToggle, onDelete }) {
           )}
           {s.notas && <div><p className="text-slate-500 mb-1 font-semibold">Notas</p><p className="italic text-slate-300">{s.notas}</p></div>}
           <div>
-            <p className="text-slate-500 mb-1.5 font-semibold">Hoja de operaciones ({(s.ops || []).length})</p>
-            <OpsTable ops={s.ops} />
+            <button
+              onClick={() => onOpenOps({ title: `${s.responsable} · ${s.fecha} · ${s.turno_label}`, ops: s.ops })}
+              className="text-indigo-300 font-bold underline flex items-center gap-1"
+            >
+              Hoja de operaciones ({(s.ops || []).length}) <ChevronRight size={13} />
+            </button>
           </div>
           <button
             onClick={() => { if (window.confirm(`¿Borrar este turno de ${s.responsable} (${s.fecha}) para siempre? Esto no se puede deshacer.`)) onDelete(s.id); }}
