@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Lock, Sparkles, X, ArrowLeft } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { useTurnoDraft } from "./useTurnoDraft";
-import { ADMIN_PIN } from "./lib";
 import EmployeePinGate from "./EmployeePinGate";
 import TurnoForm from "./TurnoForm";
 import OperacionesTab from "./OperacionesTab";
@@ -13,22 +12,22 @@ export default function App() {
   const [view, setView] = useState("turno"); // turno | operaciones | bases | adminGate | admin
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
+  const [pinChecking, setPinChecking] = useState(false);
+  const [adminPin, setAdminPin] = useState(null); // se guarda solo en memoria mientras dura la sesión
   const [wallets, setWallets] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [identity, setIdentity] = useState(null);
 
   useEffect(() => {
     (async () => {
       const { data: wal } = await supabase.from("wallets").select("*").order("orden");
       setWallets((wal || []).map((w) => w.nombre));
-      const { data: emp } = await supabase.from("employees").select("*").eq("activo", true);
-      setEmployees(emp || []);
     })();
   }, []);
 
   const draft = useTurnoDraft(identity);
 
   function logout() { setIdentity(null); setView("turno"); }
+  function exitAdmin() { setAdminPin(null); setView("turno"); }
 
   // Al cerrar el turno, se termina la sesión del empleado para que el próximo entre con su PIN.
   async function handleSubmit() {
@@ -37,22 +36,33 @@ export default function App() {
     return ok;
   }
 
+  async function submitAdminPin() {
+    setPinChecking(true);
+    const { data, error } = await supabase.rpc("verify_admin_pin", { input_pin: pinInput });
+    setPinChecking(false);
+    if (!error && data === true) {
+      setAdminPin(pinInput); setView("admin"); setPinError(false); setPinInput("");
+    } else {
+      setPinError(true); setPinInput("");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-gradient-to-b from-indigo-950/40 to-transparent" />
-      <TopBar view={view} setView={setView} opsCount={draft.opsFilledCount} identity={identity} onLogout={logout} />
+      <TopBar view={view} setView={(v) => (v === "adminGate" && adminPin ? setView("admin") : setView(v))} opsCount={draft.opsFilledCount} identity={identity} onLogout={logout} />
       <div className="max-w-5xl mx-auto px-4 pb-24 relative">
-        {view === "turno" && (identity ? <TurnoForm wallets={wallets} draft={{ ...draft, submitTurno: handleSubmit }} identity={identity} goOps={() => setView("operaciones")} /> : <EmployeePinGate employees={employees} onIdentify={setIdentity} />)}
-        {view === "operaciones" && (identity ? <OperacionesTab draft={draft} /> : <EmployeePinGate employees={employees} onIdentify={setIdentity} />)}
-        {view === "bases" && (identity ? <BasesView identity={identity} /> : <EmployeePinGate employees={employees} onIdentify={setIdentity} />)}
+        {view === "turno" && (identity ? <TurnoForm wallets={wallets} draft={{ ...draft, submitTurno: handleSubmit }} identity={identity} goOps={() => setView("operaciones")} /> : <EmployeePinGate onIdentify={setIdentity} />)}
+        {view === "operaciones" && (identity ? <OperacionesTab draft={draft} /> : <EmployeePinGate onIdentify={setIdentity} />)}
+        {view === "bases" && (identity ? <BasesView identity={identity} /> : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "adminGate" && (
           <PinGate
-            pinInput={pinInput} setPinInput={setPinInput} pinError={pinError}
-            onSubmit={() => { if (pinInput === ADMIN_PIN) { setView("admin"); setPinError(false); setPinInput(""); } else setPinError(true); }}
+            pinInput={pinInput} setPinInput={setPinInput} pinError={pinError} checking={pinChecking}
+            onSubmit={submitAdminPin}
             onBack={() => setView("turno")}
           />
         )}
-        {view === "admin" && <AdminDashboard onExit={() => setView("turno")} />}
+        {view === "admin" && <AdminDashboard adminPin={adminPin} onExit={exitAdmin} />}
       </div>
     </div>
   );
@@ -98,7 +108,7 @@ function TopBar({ view, setView, opsCount, identity, onLogout }) {
   );
 }
 
-function PinGate({ pinInput, setPinInput, pinError, onSubmit, onBack }) {
+function PinGate({ pinInput, setPinInput, pinError, checking, onSubmit, onBack }) {
   return (
     <div className="max-w-xs mx-auto mt-20 text-center pt-5">
       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-600/20 ring-1 ring-indigo-500/30 flex items-center justify-center mx-auto mb-4">
@@ -114,7 +124,9 @@ function PinGate({ pinInput, setPinInput, pinError, onSubmit, onBack }) {
         placeholder="••••" maxLength={4} autoFocus
       />
       {pinError && <p className="text-rose-400 text-xs mb-3">PIN incorrecto</p>}
-      <button onClick={onSubmit} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2.5 rounded-xl text-sm mb-2">Entrar</button>
+      <button onClick={onSubmit} disabled={checking} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2.5 rounded-xl text-sm mb-2 disabled:opacity-50">
+        {checking ? "Verificando..." : "Entrar"}
+      </button>
       <button onClick={onBack} className="text-slate-500 text-xs flex items-center gap-1 mx-auto mt-2"><ArrowLeft size={12} /> Volver</button>
     </div>
   );
