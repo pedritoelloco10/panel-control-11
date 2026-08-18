@@ -505,9 +505,9 @@ function DateRangeFilter({ rangeKey, dateFrom, dateTo, onPreset, onFrom, onTo })
 function OpsSheetModal({ data, onClose }) {
   if (!data) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/97 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto">
       <div className="max-w-3xl mx-auto p-4">
-        <div className="flex items-center justify-between mb-4 sticky top-0 bg-slate-950/97 pt-1 pb-2">
+        <div className="flex items-center justify-between mb-4 sticky top-0 bg-slate-950 pt-1 pb-3 z-10">
           <div>
             <h3 className="font-bold text-lg">Hoja de operaciones</h3>
             <p className="text-slate-500 text-xs">{data.title} · {(data.ops || []).length} operaciones</p>
@@ -515,7 +515,7 @@ function OpsSheetModal({ data, onClose }) {
           <button onClick={onClose} className="bg-white/5 ring-1 ring-white/10 rounded-lg p-2"><X size={16} /></button>
         </div>
         <table className="w-full text-xs">
-          <thead className="sticky top-14 bg-slate-900">
+          <thead className="bg-slate-900">
             <tr className="text-slate-500 text-left">
               <th className="py-2 px-2 font-semibold">#</th>
               <th className="py-2 px-2 font-semibold">Plataforma</th>
