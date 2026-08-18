@@ -23,7 +23,6 @@ export function useTurnoDraft(identity) {
   const [bajadas, setBajadas] = useState([]);
   const [movs, setMovs] = useState([]);
   const [notas, setNotas] = useState("");
-  const [mensajesEnviados, setMensajesEnviados] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -50,7 +49,7 @@ export function useTurnoDraft(identity) {
         setStockInicio(s.stock_inicio || { B: "", G: "" }); setStockCierreInf(s.stock_cierre || { B: "", G: "" });
         setOps((s.ops && s.ops.length ? s.ops : seedOps(SEED_ROWS)));
         setBajadas(s.bajadas || []); setMovs(s.movs || []); setNotas(s.notas || "");
-        setMensajesEnviados(String(s.mensajes_enviados || ""));
+        // (ya no se usa mensajes_enviados)
         setReady(true);
         return;
       }
@@ -91,7 +90,7 @@ export function useTurnoDraft(identity) {
       setMeta({ fecha: created.fecha, horaInicio, horaFin: "", responsable: identity.nombre });
       setBillInicio(carriedBill); setStockInicio(carriedStock);
       setBillCierre({}); setStockCierreInf({ B: "", G: "" });
-      setOps(seedOps(SEED_ROWS)); setBajadas([]); setMovs([]); setNotas(""); setMensajesEnviados("");
+      setOps(seedOps(SEED_ROWS)); setBajadas([]); setMovs([]); setNotas("");
       setReady(true);
     })();
     return () => { cancelled = true; };
@@ -129,7 +128,7 @@ export function useTurnoDraft(identity) {
     return { diffEfectivo, diffFichas, anyCierreData };
   }, [billCierre, stockCierreInf, expected]);
 
-  draftRef.current = { meta, billInicio, billCierre, stockInicio, stockCierreInf, opsFilled, bajadas, movs, notas, mensajesEnviados };
+  draftRef.current = { meta, billInicio, billCierre, stockInicio, stockCierreInf, opsFilled, bajadas, movs, notas };
 
   // Autoguardado cada 6s mientras el turno sigue abierto — así Admin lo ve en vivo
   // sin que dependa de que el empleado toque nada.
@@ -141,7 +140,6 @@ export function useTurnoDraft(identity) {
         bill_inicio: d.billInicio, bill_cierre: d.billCierre,
         stock_inicio: d.stockInicio, stock_cierre: d.stockCierreInf,
         ops: d.opsFilled, bajadas: d.bajadas, movs: d.movs, notas: d.notas,
-        mensajes_enviados: num(d.mensajesEnviados),
         updated_at: new Date().toISOString(),
       }).eq("id", shiftId);
     };
@@ -160,7 +158,6 @@ export function useTurnoDraft(identity) {
       bill_inicio: billInicio, bill_cierre: billCierre,
       stock_inicio: stockInicio, stock_cierre: stockCierreInf,
       ops: opsFilled, bajadas, movs, notas,
-      mensajes_enviados: num(mensajesEnviados),
       updated_at: new Date().toISOString(),
     }).eq("id", shiftId);
     setSaving(false);
@@ -175,7 +172,7 @@ export function useTurnoDraft(identity) {
     ready, carriedFrom, otherOpenBy, meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf, ops, setOps,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
-    mensajesEnviados, setMensajesEnviados, expected, cierreCheck,
+    expected, cierreCheck,
     saving, error, saved, submitTurno, opsFilledCount: opsFilled.length,
   };
 }
