@@ -12,7 +12,7 @@ export default function EmployeePinGate({ onIdentify }) {
     const { data, error } = await supabase.rpc("verify_employee_pin", { input_pin: value });
     setChecking(false);
     const match = !error && data && data[0];
-    if (match) { onIdentify({ id: match.id, nombre: match.nombre }); setPin(""); setErr(false); }
+    if (match) { onIdentify({ id: match.id, nombre: match.nombre, token: match.token }); setPin(""); setErr(false); }
     else { setErr(true); setPin(""); }
   }
   function press(d) {
