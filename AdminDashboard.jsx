@@ -49,8 +49,7 @@ function computeShift(shift) {
   // Las bajadas (a efectivo, a fichas, o a un gasto) son solo información de a dónde fue esa
   // plata — nunca se restan del Neto.
   const netoCaja = ventasTotal - retirosTotal;
-  const mensajesEnviados = num(shift.mensajes_enviados);
-  const movimientosCount = (shift.movs || []).length;
+  const movimientosCount = cargasCount + retirosCount;
   // Diferencia de fichas: lo esperado (arrastre + cargas/bono/retiros/movimientos) contra lo informado al cierre.
   const diffFichas = {};
   PLATFORMS.forEach((p) => {
@@ -63,7 +62,7 @@ function computeShift(shift) {
   const hasError = Math.abs(diffEfectivo) >= 1 || Object.values(diffFichas).some((d) => d !== null && Math.abs(d) >= 1);
   return {
     shift, ventasTotal, retirosTotal, bajadasTotal, bajadasFichas, bajadasEfectivo, bajadasGasto, gastosDetalle, netoCaja, bonoTotal, diffEfectivo, diffFichas, hasError,
-    nuevos, derivados, cargasLista, montoLista, cargasCount, retirosCount, mensajesEnviados, movimientosCount,
+    nuevos, derivados, cargasLista, montoLista, cargasCount, retirosCount, movimientosCount,
     opsCount: (shift.ops || []).length, porPlataforma,
   };
 }
@@ -118,7 +117,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
           worked.push({ trabajada_por: c.trabajada_por, fecha: c.fecha_trabajo, enviado: !!c.enviado, contestado: !!c.contestado, cargo: !!c.cargo });
         }
         if (c.fecha_trabajo === todayStr() && c.trabajada_por) {
-          if (!empStats[c.trabajada_por]) empStats[c.trabajada_por] = { contestados: 0, cargaron: 0 };
+          if (!empStats[c.trabajada_por]) empStats[c.trabajada_por] = { contactados: 0, contestados: 0, cargaron: 0 };
+          if (c.enviado) empStats[c.trabajada_por].contactados++;
           if (c.contestado) empStats[c.trabajada_por].contestados++;
           if (c.cargo) empStats[c.trabajada_por].cargaron++;
         }
@@ -188,16 +188,17 @@ export default function AdminDashboard({ adminPin, onExit }) {
     const map = {};
     computed.forEach((c) => {
       const r = c.shift.responsable;
-      if (!map[r]) map[r] = { turnos: 0, mensajes: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
+      if (!map[r]) map[r] = { turnos: 0, contactaron: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
       const e = map[r];
-      e.turnos++; e.mensajes += c.mensajesEnviados; e.cargas += c.cargasCount; e.retiros += c.retirosCount;
+      e.turnos++; e.cargas += c.cargasCount; e.retiros += c.retirosCount;
       if (c.hasError) { e.errores++; e.diffEfectivoTotal += Math.abs(c.diffEfectivo); PLATFORMS.forEach((p) => { if (c.diffFichas[p.key] !== null) e.diffFichas[p.key] += Math.abs(c.diffFichas[p.key]); }); }
     });
     workedContacts.forEach((w) => {
       if (dateFrom && w.fecha < dateFrom) return;
       if (dateTo && w.fecha > dateTo) return;
-      if (!map[w.trabajada_por]) map[w.trabajada_por] = { turnos: 0, mensajes: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
+      if (!map[w.trabajada_por]) map[w.trabajada_por] = { turnos: 0, contactaron: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
       const e = map[w.trabajada_por];
+      if (w.enviado) e.contactaron++;
       if (w.contestado) e.contestaron++;
       if (w.cargo) e.cargaron++;
     });
@@ -237,24 +238,24 @@ export default function AdminDashboard({ adminPin, onExit }) {
         const mov = (live.movs || []).filter((m) => m.plataforma === p.key).reduce((s, m) => s + num(m.monto), 0);
         fichas[p.key] = stockIni + stockDelta[p.key] + mov;
       });
-      const baseStats = empTodayBaseStats[live.responsable] || { contestados: 0, cargaron: 0 };
+      const baseStats = empTodayBaseStats[live.responsable] || { contactados: 0, contestados: 0, cargaron: 0 };
       return {
         enVivo: true, responsable: live.responsable, cajaTotal, ventasTurno: ventasTotal, premiosTurno: retirosTotal, fichas, porPlataforma,
         bajadasTotal, bajadasFichas, bajadasGasto, bajadasEfectivo,
-        mensajes: num(live.mensajes_enviados), contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
-        movimientos: (live.movs || []).length, opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
+        contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
+        movimientos: (live.ops || []).length, opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
       };
     }
     if (shifts.length) {
       const last = shifts[0]; const c = computeShift(last);
       const billCierreTotal = Object.values(last.bill_cierre || {}).reduce((s, v) => s + num(v), 0);
-      const baseStats = empTodayBaseStats[last.responsable] || { contestados: 0, cargaron: 0 };
+      const baseStats = empTodayBaseStats[last.responsable] || { contactados: 0, contestados: 0, cargaron: 0 };
       return {
         enVivo: false, responsable: last.responsable, cajaTotal: billCierreTotal, ventasTurno: c.ventasTotal, premiosTurno: c.retirosTotal,
         fichas: null, porPlataforma: c.porPlataforma,
         bajadasTotal: c.bajadasTotal, bajadasFichas: c.bajadasFichas, bajadasGasto: c.bajadasGasto, bajadasEfectivo: c.bajadasEfectivo,
-        mensajes: c.mensajesEnviados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
-        movimientos: (last.movs || []).length, opsCount: (last.ops || []).length, ops: last.ops || [],
+        contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
+        movimientos: c.cargasCount + c.retirosCount, opsCount: (last.ops || []).length, ops: last.ops || [],
       };
     }
     return null;
@@ -349,10 +350,10 @@ export default function AdminDashboard({ adminPin, onExit }) {
                 </div>
               )}
               <div className="grid grid-cols-4 gap-2 mt-2">
-                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.mensajes}</p><p className="text-[9px] text-slate-500 uppercase">Mensajes</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.contactaron}</p><p className="text-[9px] text-slate-500 uppercase">Contactaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.contestaron}</p><p className="text-[9px] text-slate-500 uppercase">Contestaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.cargaron}</p><p className="text-[9px] text-slate-500 uppercase">Cargaron</p></div>
-                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.movimientos}</p><p className="text-[9px] text-slate-500 uppercase">Movimientos</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.movimientos}</p><p className="text-[9px] text-slate-500 uppercase">Movimientos (cargas+retiros)</p></div>
               </div>
             </Card>
           )}
@@ -432,7 +433,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               <div key={nombre} className="py-2.5 border-b border-white/5 last:border-0">
                 <p className="font-bold text-sm text-indigo-300 mb-1.5">{nombre} · {e.turnos} turno{e.turnos !== 1 ? "s" : ""}</p>
                 <div className="grid grid-cols-3 gap-1.5 text-center mb-1.5">
-                  <MiniStat label="Mensajes enviados" value={e.mensajes} />
+                  <MiniStat label="Contactaron" value={e.contactaron} />
                   <MiniStat label="Contestaron" value={e.contestaron} />
                   <MiniStat label="Cargaron (bases)" value={e.cargaron} />
                 </div>
@@ -615,7 +616,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
       {expanded && (
         <div className="px-3.5 pb-4 pt-1 border-t border-white/5 text-xs space-y-3">
           <PlataformaBreakdown porPlataforma={c.porPlataforma} />
-          <p className="text-slate-400">Nuevos: {c.nuevos} · Derivados: {c.derivados} · De la lista: {c.cargasLista} ({money(c.montoLista)}) · Mensajes: {c.mensajesEnviados}</p>
+          <p className="text-slate-400">Nuevos: {c.nuevos} · Derivados: {c.derivados} · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
           <div>
             <p className="text-slate-500 mb-1 font-semibold">Billeteras — inicio → cierre</p>
             <div className="grid grid-cols-2 gap-1">
