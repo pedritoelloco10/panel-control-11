@@ -105,9 +105,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
     setDbs(dbList || []);
 
     const stats = {}; const empStats = {}; const worked = []; const reactivables = []; const flat = []; let poolDisponible = 0;
+    const { data: allContacts } = await supabase.rpc("admin_list_contacts", { input_admin_pin: adminPin });
     for (const d of (dbList || [])) {
-      const { data: contacts } = await supabase.from("contacts").select("*").eq("base_id", d.id);
-      const cs = contacts || [];
+      const cs = (allContacts || []).filter((c) => c.base_id === d.id);
       const agregadosPorEmpleado = cs.filter((c) => c.agregado_por && c.agregado_por !== "admin");
       stats[d.id] = { total: cs.length, enviados: cs.filter((c) => c.enviado).length, contestados: cs.filter((c) => c.contestado).length, cargaron: cs.filter((c) => c.cargo).length, agregadosPorEmpleado };
       cs.forEach((c) => {
@@ -468,10 +468,10 @@ export default function AdminDashboard({ adminPin, onExit }) {
         </>
       )}
 
-      {tab === "bases" && <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} onChange={loadAll} />}
+      {tab === "bases" && <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} adminPin={adminPin} onChange={loadAll} />}
       {tab === "clientes" && <ClientesRanking computedAll={computedAll} />}
       {tab === "empleados" && <EmployeeManager employees={employees} adminPin={adminPin} onChange={loadAll} />}
-      {tab === "billeteras" && <WalletManager wallets={wallets} onChange={loadAll} />}
+      {tab === "billeteras" && <WalletManager wallets={wallets} adminPin={adminPin} onChange={loadAll} />}
       <OpsSheetModal data={opsModal} onClose={() => setOpsModal(null)} />
     </div>
   );
@@ -674,13 +674,15 @@ function EmployeeManager({ employees, adminPin, onChange }) {
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState("");
   const [editPin, setEditPin] = useState("");
+  const [editRecibeLeads, setEditRecibeLeads] = useState(true);
   const [newName, setNewName] = useState("");
   const [newPin, setNewPin] = useState("");
+  const [newRecibeLeads, setNewRecibeLeads] = useState(true);
 
-  function startEdit(e) { setEditing(e.id); setEditName(e.nombre); setEditPin(e.pin); }
+  function startEdit(e) { setEditing(e.id); setEditName(e.nombre); setEditPin(e.pin); setEditRecibeLeads(e.recibe_leads !== false); }
   async function commitEdit() {
     if (!editName.trim() || editPin.length !== 4) return;
-    await supabase.rpc("admin_update_employee", { input_admin_pin: adminPin, target_id: editing, new_nombre: editName.trim(), new_pin: editPin });
+    await supabase.rpc("admin_update_employee", { input_admin_pin: adminPin, target_id: editing, new_nombre: editName.trim(), new_pin: editPin, new_recibe_leads: editRecibeLeads });
     setEditing(null); onChange();
   }
   async function remove(id) {
@@ -690,42 +692,51 @@ function EmployeeManager({ employees, adminPin, onChange }) {
   }
   async function add() {
     if (!newName.trim() || newPin.length !== 4) return;
-    await supabase.rpc("admin_add_employee", { input_admin_pin: adminPin, new_nombre: newName.trim(), new_pin: newPin });
-    setNewName(""); setNewPin(""); onChange();
+    await supabase.rpc("admin_add_employee", { input_admin_pin: adminPin, new_nombre: newName.trim(), new_pin: newPin, new_recibe_leads: newRecibeLeads });
+    setNewName(""); setNewPin(""); setNewRecibeLeads(true); onChange();
   }
 
   return (
     <Card icon={<Users size={15} />} title="Empleados y PIN" subtitle={`${employees.filter((e) => e.activo).length} personas`}>
       <div className="space-y-1.5 mb-3">
         {employees.filter((e) => e.activo).map((e) => (
-          <div key={e.id} className="flex items-center gap-2 bg-black/20 rounded-lg px-3 py-2">
+          <div key={e.id} className="bg-black/20 rounded-lg px-3 py-2">
             {editing === e.id ? (
-              <>
-                <input value={editName} onChange={(ev) => setEditName(ev.target.value)} className="input !py-1 flex-1 text-xs" />
-                <input value={editPin} onChange={(ev) => setEditPin(ev.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" className="input !py-1 w-20 text-xs text-center tracking-widest" />
-                <button onClick={commitEdit} className="text-emerald-400 font-bold text-[10px]">OK</button>
-              </>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input value={editName} onChange={(ev) => setEditName(ev.target.value)} className="input !py-1 flex-1 text-xs" />
+                  <input value={editPin} onChange={(ev) => setEditPin(ev.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" className="input !py-1 w-20 text-xs text-center tracking-widest" />
+                  <button onClick={commitEdit} className="text-emerald-400 font-bold text-[10px]">OK</button>
+                </div>
+                <button onClick={() => setEditRecibeLeads(!editRecibeLeads)} className={`text-[10px] font-bold px-2 py-1 rounded-lg ${editRecibeLeads ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-slate-500"}`}>
+                  {editRecibeLeads ? "✓ Participa del reparto de leads" : "No recibe leads (ej: no manda mensajes)"}
+                </button>
+              </div>
             ) : (
-              <>
+              <div className="flex items-center gap-2">
                 <span className="flex-1 text-xs font-semibold">{e.nombre}</span>
+                {e.recibe_leads === false && <span className="text-[9px] bg-white/5 text-slate-500 rounded-full px-2 py-0.5">sin leads</span>}
                 <span className="text-slate-500 text-xs tracking-widest">{e.pin}</span>
                 <button onClick={() => startEdit(e)} className="text-slate-600 hover:text-indigo-300"><Pencil size={13} /></button>
                 <button onClick={() => remove(e.id)} className="text-slate-600 hover:text-rose-400"><X size={13} /></button>
-              </>
+              </div>
             )}
           </div>
         ))}
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 mb-1.5">
         <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nombre" className="input flex-1 text-xs" />
         <input value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" placeholder="PIN" className="input w-20 text-xs text-center tracking-widest" />
         <button onClick={add} className="bg-white/5 ring-1 ring-white/10 rounded-lg px-3 flex items-center"><Plus size={14} /></button>
       </div>
+      <button onClick={() => setNewRecibeLeads(!newRecibeLeads)} className={`text-[10px] font-bold px-2 py-1 rounded-lg ${newRecibeLeads ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-slate-500"}`}>
+        {newRecibeLeads ? "✓ El nuevo participa del reparto de leads" : "El nuevo no recibe leads"}
+      </button>
     </Card>
   );
 }
 
-function WalletManager({ wallets, onChange }) {
+function WalletManager({ wallets, adminPin, onChange }) {
   const [editing, setEditing] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [newWallet, setNewWallet] = useState("");
@@ -733,13 +744,17 @@ function WalletManager({ wallets, onChange }) {
   function startEdit(w) { setEditing(w.id); setEditValue(w.nombre); }
   async function commitEdit() {
     if (!editValue.trim()) return;
-    await supabase.from("wallets").update({ nombre: editValue.trim() }).eq("id", editing);
+    await supabase.rpc("admin_rename_wallet", { input_admin_pin: adminPin, target_id: editing, nuevo_nombre: editValue.trim() });
     setEditing(null); onChange();
   }
-  async function remove(id) { await supabase.from("wallets").delete().eq("id", id); onChange(); }
+  async function remove(id) {
+    if (!window.confirm("¿Borrar esta billetera de la lista?")) return;
+    await supabase.rpc("admin_delete_wallet", { input_admin_pin: adminPin, target_id: id });
+    onChange();
+  }
   async function add() {
     if (!newWallet.trim()) return;
-    await supabase.from("wallets").insert({ nombre: newWallet.trim(), orden: wallets.length + 1 });
+    await supabase.rpc("admin_add_wallet", { input_admin_pin: adminPin, nombre: newWallet.trim() });
     setNewWallet(""); onChange();
   }
 
@@ -766,7 +781,7 @@ function WalletManager({ wallets, onChange }) {
   );
 }
 
-function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, poolDisponible, onChange }) {
+function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, poolDisponible, adminPin, onChange }) {
   const [newBaseName, setNewBaseName] = useState("");
   const [newBaseFuente, setNewBaseFuente] = useState("masiva");
   const [cupo, setCupo] = useState("35");
@@ -790,7 +805,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
 
   async function createBase() {
     const nombre = newBaseName.trim() || `Lista ${todayStr()}`;
-    await supabase.from("databases").insert({ nombre, tipo: "comprada", tipo_fuente: newBaseFuente });
+    await supabase.rpc("admin_create_base", { input_admin_pin: adminPin, nombre, tipo_fuente: newBaseFuente });
     setNewBaseName(""); onChange();
   }
 
@@ -809,10 +824,10 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
       for (let i = start; i < lines.length; i++) {
         const parts = lines[i].split(sep).map((p) => p.trim());
         if (!parts[0]) continue;
-        rows.push({ base_id: importTargetBase, nombre: parts[0], numero: parts[1] || "", agregado_por: "admin" });
+        rows.push({ nombre: parts[0], numero: parts[1] || "" });
       }
       if (rows.length) {
-        await supabase.from("contacts").insert(rows);
+        await supabase.rpc("admin_import_contacts", { input_admin_pin: adminPin, target_base: importTargetBase, rows });
         onChange();
       }
     };
@@ -822,7 +837,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
 
   async function viewEvents(baseId, baseNombre) {
     setEventsBase({ id: baseId, nombre: baseNombre });
-    const { data } = await supabase.from("contact_events").select("*").eq("base_id", baseId).order("created_at", { ascending: false }).limit(100);
+    const { data } = await supabase.rpc("admin_list_events", { input_admin_pin: adminPin, target_base_id: baseId });
     setEvents(data || []);
   }
 
@@ -839,7 +854,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
                 </div>
                 <button
                   onClick={async () => {
-                    await supabase.from("contacts").update({ estado: "contactado", ultimo_contacto: todayStr() }).eq("id", c.id);
+                    await supabase.rpc("admin_mark_seguimiento", { input_admin_pin: adminPin, target_id: c.id });
                     onChange();
                   }}
                   className="text-[10px] font-bold text-amber-400 flex-none ml-2"
