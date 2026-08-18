@@ -6,7 +6,17 @@ import {
 } from "lucide-react";
 import { Card, StatBox, MiniStat } from "./ui";
 import { supabase } from "./supabaseClient";
-import { PLATFORMS, DB_TYPES, num, money, todayStr, classifyTurno } from "./lib";
+import { PLATFORMS, DB_TYPES, FUENTE_TYPES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno } from "./lib";
+
+const CSV_HEADERS = [
+  { key: "nombre", label: "Nombre" },
+  { key: "numero", label: "Número" },
+  { key: "base_nombre", label: "Base" },
+  { key: "estado", label: "Estado" },
+  { key: "trabajada_por", label: "Trabajado por" },
+  { key: "fecha_trabajo", label: "Fecha" },
+  { key: "motivo_descarte", label: "Motivo descarte" },
+];
 
 function computeShift(shift) {
   let ventasTotal = 0, retirosTotal = 0;
@@ -68,6 +78,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [dbStats, setDbStats] = useState({});
   const [empTodayBaseStats, setEmpTodayBaseStats] = useState({});
   const [workedContacts, setWorkedContacts] = useState([]);
+  const [reactivables, setReactivables] = useState([]);
+  const [allContactsFlat, setAllContactsFlat] = useState([]);
+  const [poolDisponible, setPoolDisponible] = useState(0);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [rangeKey, setRangeKey] = useState("7d");
@@ -92,13 +105,15 @@ export default function AdminDashboard({ adminPin, onExit }) {
     setWallets(wal || []);
     setDbs(dbList || []);
 
-    const stats = {}; const empStats = {}; const worked = [];
+    const stats = {}; const empStats = {}; const worked = []; const reactivables = []; const flat = []; let poolDisponible = 0;
     for (const d of (dbList || [])) {
       const { data: contacts } = await supabase.from("contacts").select("*").eq("base_id", d.id);
       const cs = contacts || [];
       const agregadosPorEmpleado = cs.filter((c) => c.agregado_por && c.agregado_por !== "admin");
       stats[d.id] = { total: cs.length, enviados: cs.filter((c) => c.enviado).length, contestados: cs.filter((c) => c.contestado).length, cargaron: cs.filter((c) => c.cargo).length, agregadosPorEmpleado };
       cs.forEach((c) => {
+        flat.push({ ...c, base_nombre: d.nombre });
+        if (["nuevo", "contactado"].includes(c.estado || "nuevo") && (!c.asignado_a || c.fecha_asignacion < todayStr())) poolDisponible++;
         if (c.fecha_trabajo && c.trabajada_por) {
           worked.push({ trabajada_por: c.trabajada_por, fecha: c.fecha_trabajo, enviado: !!c.enviado, contestado: !!c.contestado, cargo: !!c.cargo });
         }
@@ -107,9 +122,13 @@ export default function AdminDashboard({ adminPin, onExit }) {
           if (c.contestado) empStats[c.trabajada_por].contestados++;
           if (c.cargo) empStats[c.trabajada_por].cargaron++;
         }
+        if ((c.estado || (c.cargo ? "cargado" : "nuevo")) === "cargado" && daysSince(c.ultimo_contacto) >= REACTIVACION_DIAS) {
+          reactivables.push({ ...c, base_nombre: d.nombre });
+        }
       });
     }
-    setDbStats(stats); setEmpTodayBaseStats(empStats); setWorkedContacts(worked);
+    setDbStats(stats); setEmpTodayBaseStats(empStats); setWorkedContacts(worked); setReactivables(reactivables);
+    setAllContactsFlat(flat); setPoolDisponible(poolDisponible);
     setLoading(false);
     setLastUpdated(new Date());
   }
@@ -208,6 +227,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
         else { retirosTotal += m; stockDelta[o.plataforma] += m; porPlataforma[o.plataforma].premios += m; }
       });
       const bajadasTotal = (live.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
+      const bajadasFichas = (live.bajadas || []).filter((b) => b.destino === "Compra de fichas").reduce((s, b) => s + num(b.monto), 0);
+      const bajadasGasto = (live.bajadas || []).filter((b) => b.destino === "Gasto de oficina").reduce((s, b) => s + num(b.monto), 0);
+      const bajadasEfectivo = bajadasTotal - bajadasFichas - bajadasGasto;
       const cajaTotal = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal;
       const fichas = {};
       PLATFORMS.forEach((p) => {
@@ -218,6 +240,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
       const baseStats = empTodayBaseStats[live.responsable] || { contestados: 0, cargaron: 0 };
       return {
         enVivo: true, responsable: live.responsable, cajaTotal, ventasTurno: ventasTotal, premiosTurno: retirosTotal, fichas, porPlataforma,
+        bajadasTotal, bajadasFichas, bajadasGasto, bajadasEfectivo,
         mensajes: num(live.mensajes_enviados), contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: (live.movs || []).length, opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
       };
@@ -229,6 +252,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
       return {
         enVivo: false, responsable: last.responsable, cajaTotal: billCierreTotal, ventasTurno: c.ventasTotal, premiosTurno: c.retirosTotal,
         fichas: null, porPlataforma: c.porPlataforma,
+        bajadasTotal: c.bajadasTotal, bajadasFichas: c.bajadasFichas, bajadasGasto: c.bajadasGasto, bajadasEfectivo: c.bajadasEfectivo,
         mensajes: c.mensajesEnviados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: (last.movs || []).length, opsCount: (last.ops || []).length, ops: last.ops || [],
       };
@@ -241,6 +265,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const subtabs = [
     { key: "resumen", label: "Resumen", icon: <BarChart3 size={12} /> },
     { key: "turnos", label: "Turnos", icon: <TrendingUp size={12} /> },
+    { key: "clientes", label: "Clientes", icon: <Users size={12} /> },
     { key: "bases", label: "Bases", icon: <Database size={12} /> },
     { key: "empleados", label: "Empleados", icon: <Users size={12} /> },
     { key: "billeteras", label: "Billeteras", icon: <Wallet size={12} /> },
@@ -305,6 +330,22 @@ export default function AdminDashboard({ adminPin, onExit }) {
                       <span className="font-bold">{Math.round(ahoraMismo.fichas[p.key]).toLocaleString("es-AR")}</span>
                     </div>
                   ))}
+                </div>
+              )}
+              {ahoraMismo.bajadasTotal > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  <div className="bg-white/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase">Bajado a efectivo</p>
+                    <p className="text-sm font-black">{money(ahoraMismo.bajadasEfectivo)}</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase">Compra de fichas</p>
+                    <p className="text-sm font-black text-indigo-300">{money(ahoraMismo.bajadasFichas)}</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase">Gastos</p>
+                    <p className="text-sm font-black text-amber-400">{money(ahoraMismo.bajadasGasto)}</p>
+                  </div>
                 </div>
               )}
               <div className="grid grid-cols-4 gap-2 mt-2">
@@ -426,7 +467,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
         </>
       )}
 
-      {tab === "bases" && <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} onChange={loadAll} />}
+      {tab === "bases" && <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} onChange={loadAll} />}
+      {tab === "clientes" && <ClientesRanking computedAll={computedAll} />}
       {tab === "empleados" && <EmployeeManager employees={employees} adminPin={adminPin} onChange={loadAll} />}
       {tab === "billeteras" && <WalletManager wallets={wallets} onChange={loadAll} />}
       <OpsSheetModal data={opsModal} onClose={() => setOpsModal(null)} />
@@ -723,12 +765,11 @@ function WalletManager({ wallets, onChange }) {
   );
 }
 
-function BasesAdmin({ employees, dbs, dbStats, onChange }) {
+function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, poolDisponible, onChange }) {
   const [newBaseName, setNewBaseName] = useState("");
-  const [empId, setEmpId] = useState("");
-  const [baseId, setBaseId] = useState("");
-  const [quota, setQuota] = useState("");
-  const [assignments, setAssignments] = useState([]);
+  const [newBaseFuente, setNewBaseFuente] = useState("masiva");
+  const [cupo, setCupo] = useState("35");
+  const [cupoSaved, setCupoSaved] = useState(false);
   const [fileRef, setFileRef] = useState(null);
   const [importTargetBase, setImportTargetBase] = useState("");
   const [eventsBase, setEventsBase] = useState(null);
@@ -736,34 +777,20 @@ function BasesAdmin({ employees, dbs, dbStats, onChange }) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("assignments").select("*").eq("fecha", todayStr()).order("created_at", { ascending: false });
-      setAssignments(data || []);
+      const { data } = await supabase.from("app_config").select("value").eq("key", "cupo_diario_leads").single();
+      if (data) setCupo(data.value);
     })();
-  }, [dbs, employees]);
+  }, []);
+
+  async function saveCupo() {
+    await supabase.from("app_config").update({ value: String(parseInt(cupo, 10) || 35) }).eq("key", "cupo_diario_leads");
+    setCupoSaved(true); setTimeout(() => setCupoSaved(false), 1500);
+  }
 
   async function createBase() {
     const nombre = newBaseName.trim() || `Lista ${todayStr()}`;
-    await supabase.from("databases").insert({ nombre, tipo: "comprada" });
+    await supabase.from("databases").insert({ nombre, tipo: "comprada", tipo_fuente: newBaseFuente });
     setNewBaseName(""); onChange();
-  }
-
-  async function assign() {
-    if (!empId || !baseId) return;
-    const emp = employees.find((e) => e.id === empId);
-    const base = dbs.find((d) => d.id === baseId);
-    if (!emp || !base) return;
-    await supabase.from("assignments").delete().eq("empleado_id", empId).eq("fecha", todayStr());
-    await supabase.from("assignments").insert({
-      empleado_id: empId, empleado_nombre: emp.nombre, base_id: baseId, base_nombre: base.nombre,
-      fecha: todayStr(), quota: quota === "" ? null : parseInt(quota, 10),
-    });
-    setEmpId(""); setBaseId(""); setQuota("");
-    const { data } = await supabase.from("assignments").select("*").eq("fecha", todayStr()).order("created_at", { ascending: false });
-    setAssignments(data || []);
-  }
-  async function removeAssignment(id) {
-    await supabase.from("assignments").delete().eq("id", id);
-    setAssignments(assignments.filter((a) => a.id !== id));
   }
 
   function handleFile(e) {
@@ -800,7 +827,41 @@ function BasesAdmin({ employees, dbs, dbStats, onChange }) {
 
   return (
     <>
+      {reactivables.length > 0 && (
+        <Card icon={<Sparkles size={15} />} title="Para reactivar" subtitle={`${reactivables.length} contactos que ya cargaron y llevan ${REACTIVACION_DIAS}+ días sin que nadie los toque`}>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {reactivables.map((c) => (
+              <div key={c.id} className="flex items-center justify-between bg-amber-500/10 ring-1 ring-amber-500/20 rounded-lg px-2.5 py-2 text-xs">
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{c.nombre} <span className="text-slate-500 font-normal">· {c.base_nombre}</span></p>
+                  <p className="text-[10px] text-slate-500">{c.numero || "sin número"} · último contacto hace {daysSince(c.ultimo_contacto)} días</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    await supabase.from("contacts").update({ estado: "contactado", ultimo_contacto: todayStr() }).eq("id", c.id);
+                    onChange();
+                  }}
+                  className="text-[10px] font-bold text-amber-400 flex-none ml-2"
+                >
+                  Marcar en seguimiento
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       <Card icon={<Database size={15} />} title="Crear base nueva" subtitle="Solo vos podés crear bases">
+        <div className="flex gap-1.5 mb-2">
+          {FUENTE_TYPES.map((f) => (
+            <button
+              key={f.key} onClick={() => setNewBaseFuente(f.key)}
+              className={`flex-1 rounded-lg py-2 text-[10px] font-bold ${newBaseFuente === f.key ? "bg-indigo-500 text-white" : "bg-white/5 text-slate-400"}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-slate-600 mb-2">{FUENTE_TYPES.find((f) => f.key === newBaseFuente)?.hint}</p>
         <div className="flex gap-1.5">
           <input value={newBaseName} onChange={(e) => setNewBaseName(e.target.value)} placeholder={`Base nueva (ej: Lista ${todayStr()})`} className="input flex-1 text-xs" />
           <button onClick={createBase} className="bg-white/5 ring-1 ring-white/10 rounded-lg px-3 flex items-center gap-1 text-xs font-bold"><Plus size={13} /> Crear</button>
@@ -818,29 +879,47 @@ function BasesAdmin({ employees, dbs, dbStats, onChange }) {
         <p className="text-[10px] text-slate-600 mt-2">Archivo .csv o .txt, una línea por contacto: nombre,número</p>
       </Card>
 
-      <Card icon={<Users size={15} />} title="Asignar bases a empleados" subtitle="Podés poner un cupo: cuántos contactos puede sumar el empleado hoy">
-        <div className="grid grid-cols-2 gap-1.5 mb-1.5">
-          <select value={empId} onChange={(e) => setEmpId(e.target.value)} className="input !py-1.5 text-xs">
-            <option value="">Empleado</option>
-            {employees.filter((e) => e.activo).map((e) => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
-          </select>
-          <select value={baseId} onChange={(e) => setBaseId(e.target.value)} className="input !py-1.5 text-xs">
-            <option value="">Base</option>
-            {dbs.map((d) => (<option key={d.id} value={d.id}>{d.nombre}</option>))}
-          </select>
+      <Card icon={<Users size={15} />} title="Reparto automático" subtitle="Cada empleado recibe contactos solo hasta este cupo, tomados del pool compartido">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="bg-white/5 rounded-xl px-3 py-2 flex-1 text-center">
+            <p className="text-[9px] text-slate-500 uppercase">Disponibles en el pool</p>
+            <p className="text-lg font-black text-emerald-400">{poolDisponible}</p>
+          </div>
+          <div className="bg-white/5 rounded-xl px-3 py-2 flex-1 text-center">
+            <p className="text-[9px] text-slate-500 uppercase">Empleados activos</p>
+            <p className="text-lg font-black">{employees.filter((e) => e.activo).length}</p>
+          </div>
         </div>
+        <p className="text-[10px] text-slate-500 mb-1.5 font-semibold">Cupo diario por empleado</p>
         <div className="flex gap-1.5">
-          <input value={quota} onChange={(e) => setQuota(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="Cupo de contactos que puede agregar (opcional)" className="input flex-1 !py-1.5 text-xs" />
-          <button onClick={assign} className="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-lg px-3 text-xs font-bold">Asignar hoy</button>
+          <input value={cupo} onChange={(e) => setCupo(e.target.value.replace(/\D/g, ""))} inputMode="numeric" className="input flex-1 !py-1.5 text-xs" />
+          <button onClick={saveCupo} className="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-lg px-3 text-xs font-bold">{cupoSaved ? "✓ Guardado" : "Guardar"}</button>
         </div>
-        <div className="mt-3 space-y-1.5">
-          {assignments.length === 0 && <p className="text-slate-600 text-xs italic">Nadie tiene una base asignada para hoy todavía.</p>}
-          {assignments.map((a) => (
-            <div key={a.id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2 text-xs">
-              <span><span className="font-bold text-indigo-300">{a.empleado_nombre}</span> → {a.base_nombre} {a.quota != null && <span className="text-amber-400">(cupo {a.quota})</span>}</span>
-              <button onClick={() => removeAssignment(a.id)} className="text-slate-600 hover:text-rose-400"><X size={13} /></button>
-            </div>
-          ))}
+        <p className="text-[10px] text-slate-600 mt-2">
+          Ya no hace falta asignar bases a mano: cuando un empleado entra a Bases, el sistema le arma su lista de hoy solo, priorizando primero "Principales", después "Masiva", y por último "Comprada" — hasta llegar al cupo.
+        </p>
+      </Card>
+
+      <Card icon={<Upload size={15} />} title="Reportes — exportar por estado" subtitle="Se descarga como CSV, se abre directo en Excel">
+        <div className="grid grid-cols-3 gap-1.5">
+          <button
+            onClick={() => downloadCsv(`enviados_${todayStr()}.csv`, allContactsFlat.filter((c) => (c.estado || "nuevo") === "contactado"), CSV_HEADERS)}
+            className="bg-white/5 ring-1 ring-white/10 rounded-lg py-2 text-[10px] font-bold text-center"
+          >
+            Enviados<br /><span className="text-slate-500 font-normal">(sin respuesta)</span>
+          </button>
+          <button
+            onClick={() => downloadCsv(`contestados_${todayStr()}.csv`, allContactsFlat.filter((c) => ["contestado", "interesado"].includes(c.estado)), CSV_HEADERS)}
+            className="bg-white/5 ring-1 ring-white/10 rounded-lg py-2 text-[10px] font-bold text-center"
+          >
+            Contestados<br /><span className="text-slate-500 font-normal">(sin cargar aún)</span>
+          </button>
+          <button
+            onClick={() => downloadCsv(`cargaron_${todayStr()}.csv`, allContactsFlat.filter((c) => c.estado === "cargado"), CSV_HEADERS)}
+            className="bg-white/5 ring-1 ring-white/10 rounded-lg py-2 text-[10px] font-bold text-center"
+          >
+            Cargaron<br /><span className="text-slate-500 font-normal">(convertidos)</span>
+          </button>
         </div>
       </Card>
 
@@ -878,6 +957,73 @@ function BasesAdmin({ employees, dbs, dbStats, onChange }) {
             {events.length === 0 && <p className="text-slate-600 text-xs italic">Sin actividad registrada.</p>}
             {events.map((ev) => (
               <p key={ev.id} className="text-[10px] text-slate-400">{new Date(ev.created_at).toLocaleString("es-AR")} · <span className="text-slate-300 font-semibold">{ev.empleado}</span> · {ev.accion}</p>
+            ))}
+          </div>
+        </Card>
+      )}
+    </>
+  );
+}
+
+function ClientesRanking({ computedAll }) {
+  const [rangeKey, setRangeKey] = useState("todo");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  function applyPreset(key) {
+    setRangeKey(key);
+    const today = todayStr();
+    if (key === "hoy") { setDateFrom(today); setDateTo(today); }
+    else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
+    else if (key === "mes") { const d = new Date(); d.setDate(1); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
+    else if (key === "todo") { setDateFrom(""); setDateTo(""); }
+  }
+
+  const ranking = useMemo(() => {
+    const map = {};
+    computedAll.forEach((c) => {
+      const s = c.shift;
+      if (dateFrom && s.fecha < dateFrom) return;
+      if (dateTo && s.fecha > dateTo) return;
+      (s.ops || []).forEach((o) => {
+        const cliente = (o.cliente || "").trim();
+        if (!cliente) return;
+        const m = num(o.monto);
+        if (!map[cliente]) map[cliente] = { cargas: 0, premios: 0, ops: 0, ultima: s.fecha };
+        if (o.tipo === "carga") map[cliente].cargas += m; else map[cliente].premios += m;
+        map[cliente].ops++;
+        if (s.fecha > map[cliente].ultima) map[cliente].ultima = s.fecha;
+      });
+    });
+    return Object.entries(map)
+      .map(([cliente, d]) => ({ cliente, ...d, neto: d.cargas - d.premios }))
+      .sort((a, b) => b.neto - a.neto);
+  }, [computedAll, dateFrom, dateTo]);
+
+  const sinDato = computedAll.every((c) => (c.shift.ops || []).every((o) => !o.cliente));
+
+  return (
+    <>
+      <DateRangeFilter rangeKey={rangeKey} dateFrom={dateFrom} dateTo={dateTo} onPreset={applyPreset} onFrom={(v) => { setRangeKey("custom"); setDateFrom(v); }} onTo={(v) => { setRangeKey("custom"); setDateTo(v); }} />
+
+      {sinDato ? (
+        <Card icon={<Users size={15} />} title="Todavía no hay datos de clientes" subtitle="Se arma solo a medida que se completa el campo 'Cliente' en Operaciones">
+          <p className="text-slate-500 text-xs">Es un campo opcional — apenas empiecen a completarlo (aunque sea de a poco), acá va a aparecer el ranking real de quién te deja más plata.</p>
+        </Card>
+      ) : (
+        <Card icon={<Users size={15} />} title="Ranking de clientes" subtitle={`${ranking.length} identificados en el período`}>
+          <div className="space-y-1.5 max-h-[32rem] overflow-y-auto">
+            {ranking.map((r, i) => (
+              <div key={r.cliente} className="flex items-center justify-between bg-white/[0.02] ring-1 ring-white/5 rounded-lg px-3 py-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-slate-600 font-bold w-5 flex-none">{i + 1}</span>
+                  <div className="min-w-0">
+                    <p className="font-bold truncate">···{r.cliente}</p>
+                    <p className="text-[10px] text-slate-500">{r.ops} operaciones · última {r.ultima}</p>
+                  </div>
+                </div>
+                <p className={`font-black flex-none ${r.neto >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{money(r.neto)}</p>
+              </div>
             ))}
           </div>
         </Card>
