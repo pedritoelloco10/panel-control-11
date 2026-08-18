@@ -5,7 +5,7 @@ import { PLATFORMS, num, money, blankOp, seedOps, GROW_BATCH } from "./lib";
 import { supabase } from "./supabaseClient";
 
 export default function OperacionesTab({ draft }) {
-  const { ops, setOps, mensajesEnviados, setMensajesEnviados, expected, otherOpenBy } = draft;
+  const { ops, setOps, expected, otherOpenBy } = draft;
   const [clientesConocidos, setClientesConocidos] = useState([]);
 
   useEffect(() => {
@@ -57,20 +57,17 @@ export default function OperacionesTab({ draft }) {
         <button onClick={clearEmpty} className="text-slate-500 text-[11px]">Ordenar filas vacías</button>
       </div>
       <p className="text-[10px] text-slate-600 mb-2.5">
-        Atajos en el monto: <b className="text-slate-400">B/G</b> plataforma · <b className="text-slate-400">C/R</b> carga o retiro · <b className="text-slate-400">↑ ↓ Enter</b> cambiar de fila
+        Atajos: <b className="text-slate-400">B/G</b> plataforma · <b className="text-slate-400">C/R</b> carga o retiro · <b className="text-slate-400">← →</b> monto/bono/cliente · <b className="text-slate-400">↑ ↓ Enter</b> cambiar de fila
       </p>
 
       <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-2.5 mb-2.5 sticky top-16 z-10 backdrop-blur">
-        <div className="grid grid-cols-2 gap-2 mb-2">
+        <div className="grid grid-cols-2 gap-2">
           {PLATFORMS.map((p) => (
             <p key={p.key} className="text-[10px] text-indigo-300 font-bold text-center">
               {p.label} esperado ahora: {money(expected.stock[p.key])}
             </p>
           ))}
         </div>
-        <Field label="Mensajes enviados este turno">
-          <input inputMode="numeric" value={mensajesEnviados} onChange={(e) => setMensajesEnviados(e.target.value)} placeholder="0" className="input !py-1.5 text-xs" />
-        </Field>
       </div>
 
       <div className="space-y-1.5">
@@ -85,32 +82,44 @@ export default function OperacionesTab({ draft }) {
   );
 }
 
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <span className="block text-[9px] text-slate-500 mb-0.5 font-semibold uppercase">{label}</span>
-      {children}
-    </label>
-  );
+function focusField(row, field) {
+  let el = document.querySelector(`[data-row="${row}"][data-field="${field}"]`);
+  if (!el) el = document.querySelector(`[data-row="${row}"][data-field="monto"]`); // fallback si ese campo no existe en esa fila (ej: bono en un retiro)
+  if (el) { el.focus(); el.select && el.select(); }
 }
 
 function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
   const hasData = o.monto !== "";
-  function focusRow(i) {
-    const next = document.querySelector(`[data-monto-idx="${i}"]`);
-    if (next) { next.focus(); next.select && next.select(); }
+  const esCarga = o.tipo === "carga";
+
+  function makeKeyDown(field) {
+    return (e) => {
+      // Flechas arriba/abajo y Enter: mismo campo, fila siguiente o anterior.
+      if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); focusField(index + 1, field); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); focusField(Math.max(0, index - 1), field); return; }
+      // Flechas izquierda/derecha: se mueve entre monto → bono → cliente, dentro de la misma fila.
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (field === "monto") focusField(index, esCarga ? "bono" : "cliente");
+        else if (field === "bono") focusField(index, "cliente");
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        if (field === "cliente") focusField(index, esCarga ? "bono" : "monto");
+        else if (field === "bono") focusField(index, "monto");
+        return;
+      }
+      // Atajos de letra, solo tienen sentido parado en el monto (para no interferir con escribir el número de cliente).
+      if (field === "monto") {
+        const k = e.key.toLowerCase();
+        if (k === "b" || k === "g") { e.preventDefault(); onUpdate({ plataforma: k.toUpperCase() }); return; }
+        if (k === "c") { e.preventDefault(); onUpdate({ tipo: "carga" }); return; }
+        if (k === "r") { e.preventDefault(); onUpdate({ tipo: "retiro" }); return; }
+      }
+    };
   }
-  function handleKeyDown(e) {
-    // Atajos para cargar sin usar el mouse:
-    // Enter / flecha abajo → fila siguiente, flecha arriba → fila anterior,
-    // B/G → plataforma, C/R → tipo (carga/retiro).
-    if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); focusRow(index + 1); return; }
-    if (e.key === "ArrowUp") { e.preventDefault(); focusRow(Math.max(0, index - 1)); return; }
-    const k = e.key.toLowerCase();
-    if (k === "b" || k === "g") { e.preventDefault(); onUpdate({ plataforma: k.toUpperCase() }); return; }
-    if (k === "c") { e.preventDefault(); onUpdate({ tipo: "carga" }); return; }
-    if (k === "r") { e.preventDefault(); onUpdate({ tipo: "retiro" }); return; }
-  }
+
   return (
     <div className="flex items-center gap-1.5 bg-white/[0.02] ring-1 ring-white/5 rounded-xl px-2 py-1.5">
       <div className="flex gap-0.5">
@@ -126,25 +135,33 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
       <div className="flex-1 min-w-0">
         <input
           inputMode="numeric" placeholder="Monto" value={o.monto}
-          data-monto-idx={index}
-          onChange={(e) => onUpdate({ monto: e.target.value })}
-          onKeyDown={handleKeyDown}
+          data-row={index} data-field="monto"
+          onChange={(e) => onUpdate({ monto: e.target.value.replace(/[^\d]/g, "") })}
+          onKeyDown={makeKeyDown("monto")}
           className="input !py-1.5 text-xs"
         />
       </div>
+      {esCarga && (
+        <div className="flex-1 min-w-0">
+          <input
+            inputMode="numeric" placeholder="Bono fichas" value={o.bono}
+            data-row={index} data-field="bono"
+            onChange={(e) => onUpdate({ bono: e.target.value.replace(/[^\d]/g, "") })}
+            onKeyDown={makeKeyDown("bono")}
+            className="input !py-1.5 text-xs"
+          />
+        </div>
+      )}
       <div className="w-14 flex-none">
         <input
           list="clientes-list" placeholder="Cliente" value={o.cliente || ""} maxLength={12}
+          data-row={index} data-field="cliente"
           onChange={(e) => onUpdate({ cliente: e.target.value })}
+          onKeyDown={makeKeyDown("cliente")}
           onBlur={(e) => onClienteDone(e.target.value)}
           className="input !py-1.5 text-xs !px-1.5 text-center"
         />
       </div>
-      {o.tipo === "carga" && (
-        <div className="flex-1 min-w-0">
-          <input inputMode="numeric" placeholder="Bono fichas" value={o.bono} onChange={(e) => onUpdate({ bono: e.target.value })} className="input !py-1.5 text-xs" />
-        </div>
-      )}
       <div className="flex gap-0.5">
         {[["nuevo", "N"], ["derivado", "D"], ["lista", "L"]].map(([v, l]) => (
           <button key={v} onClick={() => onUpdate({ origen: o.origen === v ? null : v })} className={`w-6 h-6 rounded text-[9px] font-black ${o.origen === v ? "bg-emerald-500 text-white" : "bg-white/5 text-slate-500"}`}>{l}</button>
