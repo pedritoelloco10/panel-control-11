@@ -1,10 +1,26 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { X, Lock } from "lucide-react";
 import { Card } from "./ui";
 import { PLATFORMS, num, money, blankOp, seedOps, GROW_BATCH } from "./lib";
+import { supabase } from "./supabaseClient";
 
 export default function OperacionesTab({ draft }) {
   const { ops, setOps, mensajesEnviados, setMensajesEnviados, expected, otherOpenBy } = draft;
+  const [clientesConocidos, setClientesConocidos] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("clientes").select("identificador").order("created_at", { ascending: false }).limit(500);
+      setClientesConocidos((data || []).map((c) => c.identificador));
+    })();
+  }, []);
+
+  async function recordarCliente(id) {
+    const v = (id || "").trim();
+    if (!v || clientesConocidos.includes(v)) return;
+    setClientesConocidos((prev) => [v, ...prev]);
+    await supabase.from("clientes").upsert({ identificador: v }, { onConflict: "identificador" });
+  }
 
   if (otherOpenBy) {
     return (
@@ -40,6 +56,9 @@ export default function OperacionesTab({ draft }) {
         </div>
         <button onClick={clearEmpty} className="text-slate-500 text-[11px]">Ordenar filas vacías</button>
       </div>
+      <p className="text-[10px] text-slate-600 mb-2.5">
+        Atajos en el monto: <b className="text-slate-400">B/G</b> plataforma · <b className="text-slate-400">C/R</b> carga o retiro · <b className="text-slate-400">↑ ↓ Enter</b> cambiar de fila
+      </p>
 
       <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-2.5 mb-2.5 sticky top-16 z-10 backdrop-blur">
         <div className="grid grid-cols-2 gap-2 mb-2">
@@ -56,9 +75,12 @@ export default function OperacionesTab({ draft }) {
 
       <div className="space-y-1.5">
         {ops.map((o, i) => (
-          <OpRow key={o.id} o={o} index={i} onUpdate={(patch) => updateOp(o.id, patch, i)} onRemove={() => removeOp(o.id)} />
+          <OpRow key={o.id} o={o} index={i} onUpdate={(patch) => updateOp(o.id, patch, i)} onRemove={() => removeOp(o.id)} onClienteDone={recordarCliente} />
         ))}
       </div>
+      <datalist id="clientes-list">
+        {clientesConocidos.map((c) => (<option key={c} value={c} />))}
+      </datalist>
     </div>
   );
 }
@@ -72,13 +94,22 @@ function Field({ label, children }) {
   );
 }
 
-function OpRow({ o, index, onUpdate, onRemove }) {
+function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
   const hasData = o.monto !== "";
-  function focusNext() {
-    // Enter en el monto pasa directo al monto de la fila siguiente, así se puede
-    // cargar operación tras operación sin tocar la pantalla.
-    const next = document.querySelector(`[data-monto-idx="${index + 1}"]`);
-    if (next) next.focus();
+  function focusRow(i) {
+    const next = document.querySelector(`[data-monto-idx="${i}"]`);
+    if (next) { next.focus(); next.select && next.select(); }
+  }
+  function handleKeyDown(e) {
+    // Atajos para cargar sin usar el mouse:
+    // Enter / flecha abajo → fila siguiente, flecha arriba → fila anterior,
+    // B/G → plataforma, C/R → tipo (carga/retiro).
+    if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); focusRow(index + 1); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); focusRow(Math.max(0, index - 1)); return; }
+    const k = e.key.toLowerCase();
+    if (k === "b" || k === "g") { e.preventDefault(); onUpdate({ plataforma: k.toUpperCase() }); return; }
+    if (k === "c") { e.preventDefault(); onUpdate({ tipo: "carga" }); return; }
+    if (k === "r") { e.preventDefault(); onUpdate({ tipo: "retiro" }); return; }
   }
   return (
     <div className="flex items-center gap-1.5 bg-white/[0.02] ring-1 ring-white/5 rounded-xl px-2 py-1.5">
@@ -97,8 +128,16 @@ function OpRow({ o, index, onUpdate, onRemove }) {
           inputMode="numeric" placeholder="Monto" value={o.monto}
           data-monto-idx={index}
           onChange={(e) => onUpdate({ monto: e.target.value })}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNext(); } }}
+          onKeyDown={handleKeyDown}
           className="input !py-1.5 text-xs"
+        />
+      </div>
+      <div className="w-14 flex-none">
+        <input
+          list="clientes-list" placeholder="Cliente" value={o.cliente || ""} maxLength={12}
+          onChange={(e) => onUpdate({ cliente: e.target.value })}
+          onBlur={(e) => onClienteDone(e.target.value)}
+          className="input !py-1.5 text-xs !px-1.5 text-center"
         />
       </div>
       {o.tipo === "carga" && (
