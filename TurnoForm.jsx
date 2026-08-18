@@ -110,25 +110,47 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
               <input
                 inputMode="numeric" value={billCierre[w] || ""}
                 data-cierre-idx={i}
-                onChange={(e) => setBillCierre({ ...billCierre, [w]: e.target.value })}
+                onChange={(e) => setBillCierre({ ...billCierre, [w]: e.target.value.replace(/[^\d]/g, "") })}
                 onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  e.preventDefault();
-                  const next = document.querySelector(`[data-cierre-idx="${i + 1}"]`);
-                  if (next) next.focus();
+                  if (e.key === "Enter" || e.key === "ArrowDown") {
+                    e.preventDefault();
+                    const next = document.querySelector(`[data-cierre-idx="${i + 1}"]`);
+                    if (next) { next.focus(); next.select && next.select(); }
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    const prev = document.querySelector(`[data-cierre-idx="${Math.max(0, i - 1)}"]`);
+                    if (prev) { prev.focus(); prev.select && prev.select(); }
+                  }
                 }}
                 placeholder="0" className="input"
               />
             </Field>
           ))}
         </div>
+        <p className="text-[10px] text-slate-600 mt-2">↑ ↓ o Enter para moverte entre billeteras.</p>
       </Card>
 
       <Card icon={<Coins size={15} />} title="Stock de fichas — cierre (informado)">
         <div className="grid grid-cols-2 gap-2">
-          {PLATFORMS.map((p) => (
+          {PLATFORMS.map((p, i) => (
             <Field key={p.key} label={`${p.label} — cierre`}>
-              <input inputMode="numeric" value={stockCierreInf[p.key]} onChange={(e) => setStockCierreInf({ ...stockCierreInf, [p.key]: e.target.value })} placeholder="0" className="input" />
+              <input
+                inputMode="numeric" value={stockCierreInf[p.key]}
+                data-ficha-idx={i}
+                onChange={(e) => setStockCierreInf({ ...stockCierreInf, [p.key]: e.target.value.replace(/[^\d]/g, "") })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    const next = document.querySelector(`[data-ficha-idx="${i + 1}"]`);
+                    if (next) { next.focus(); next.select && next.select(); }
+                  } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    const prev = document.querySelector(`[data-ficha-idx="${Math.max(0, i - 1)}"]`);
+                    if (prev) { prev.focus(); prev.select && prev.select(); }
+                  }
+                }}
+                placeholder="0" className="input"
+              />
             </Field>
           ))}
         </div>
