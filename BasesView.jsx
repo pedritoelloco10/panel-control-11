@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Database, Users, Plus, Sparkles, ChevronDown } from "lucide-react";
+import { Database, Users, Plus, Sparkles, ChevronDown, Flame } from "lucide-react";
 import { Card } from "./ui";
 import { todayStr, LEAD_STATES, MOTIVOS_DESCARTE } from "./lib";
 import { supabase } from "./supabaseClient";
@@ -24,6 +24,7 @@ const ACTIVOS = ["nuevo", "contactado", "contestado", "interesado"];
 
 export default function BasesView({ identity }) {
   const [contacts, setContacts] = useState([]);
+  const [urgentes, setUrgentes] = useState([]);
   const [cupo, setCupo] = useState(35);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -43,6 +44,11 @@ export default function BasesView({ identity }) {
     const { data, error } = await supabase.rpc("session_get_leads", { input_token: identity.token });
     if (error) { setErrMsg("Tu sesión venció, volvé a entrar con tu PIN."); setLoading(false); return; }
     setContacts((data || []).sort((a, b) => (a.estado === "nuevo" ? -1 : 1)));
+
+    // La cola de urgentes es de todos — contactó y se está enfriando, lo ve
+    // cualquiera con sesión válida, le toquen leads nuevos hoy o no.
+    const { data: urg } = await supabase.rpc("session_urgent_queue", { input_token: identity.token });
+    setUrgentes(urg || []);
     setLoading(false);
   }
 
@@ -52,6 +58,12 @@ export default function BasesView({ identity }) {
       const patch = { estado, motivo_descarte: estado === "descartado" ? motivo : null };
       setContacts(contacts.map((x) => (x.id === c.id ? { ...x, ...patch } : x)));
     }
+    setDiscardingId(null);
+  }
+
+  async function setEstadoUrgente(c, estado, motivo) {
+    const { error } = await supabase.rpc("session_claim_urgent", { input_token: identity.token, target_id: c.id, nuevo_estado: estado, motivo: motivo || null });
+    if (!error) setUrgentes(urgentes.filter((x) => x.id !== c.id));
     setDiscardingId(null);
   }
 
@@ -84,6 +96,48 @@ export default function BasesView({ identity }) {
 
       {!errMsg && (
         <>
+          {urgentes.length > 0 && (
+            <Card
+              icon={<Flame size={15} className="text-rose-400" />} title="Urgentes — se están enfriando"
+              subtitle="Contestaron hace 2+ horas y siguen sin cerrar. Es para cualquiera, no hace falta que sean tuyos."
+            >
+              <div className="space-y-2">
+                {urgentes.map((c) => {
+                  const st = LEAD_STATES.find((s) => s.key === (c.estado || "contestado")) || LEAD_STATES[0];
+                  return (
+                    <div key={c.id} className="bg-rose-500/10 ring-1 ring-rose-500/30 rounded-xl px-3 py-2.5">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-xs truncate">{c.nombre}</p>
+                          <p className="text-slate-500 text-[10px]">{c.numero || "sin número"}</p>
+                        </div>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex-none ${BADGE_CLASSES[st.color]}`}>{st.label}</span>
+                      </div>
+                      <div className="flex gap-1 flex-wrap">
+                        <button onClick={() => setEstadoUrgente(c, "cargado")} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-500 text-white">Cargó</button>
+                        <button onClick={() => setEstadoUrgente(c, "interesado")} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-500 text-white">Sigue interesado</button>
+                        <button
+                          onClick={() => setDiscardingId(discardingId === "u" + c.id ? null : "u" + c.id)}
+                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white/10 text-slate-300 flex items-center gap-0.5"
+                        >
+                          Descartar <ChevronDown size={10} />
+                        </button>
+                      </div>
+                      {discardingId === "u" + c.id && (
+                        <div className="flex gap-1 flex-wrap mt-2 pt-2 border-t border-white/10">
+                          {MOTIVOS_DESCARTE.map((m) => (
+                            <button key={m} onClick={() => setEstadoUrgente(c, "descartado", m)} className="text-[9px] bg-white/10 text-slate-300 px-2 py-1 rounded-lg">
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
           <div className="bg-indigo-500/10 ring-1 ring-indigo-500/30 rounded-xl px-3.5 py-3 mb-4 flex items-center gap-2.5">
             <Sparkles size={16} className="text-indigo-300 flex-none" />
             <p className="text-xs text-slate-300">
