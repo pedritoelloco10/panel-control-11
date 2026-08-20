@@ -79,6 +79,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [workedContacts, setWorkedContacts] = useState([]);
   const [reactivables, setReactivables] = useState([]);
   const [allContactsFlat, setAllContactsFlat] = useState([]);
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [refuerzos, setRefuerzos] = useState([]);
   const [poolDisponible, setPoolDisponible] = useState(0);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
@@ -129,6 +131,12 @@ export default function AdminDashboard({ adminPin, onExit }) {
     }
     setDbStats(stats); setEmpTodayBaseStats(empStats); setWorkedContacts(worked); setReactivables(reactivables);
     setAllContactsFlat(flat); setPoolDisponible(poolDisponible);
+
+    const { data: sessions } = await supabase.rpc("admin_active_sessions", { input_admin_pin: adminPin });
+    setActiveSessions(sessions || []);
+    const { data: refs } = await supabase.rpc("admin_list_refuerzos", { input_admin_pin: adminPin });
+    setRefuerzos(refs || []);
+
     setLoading(false);
     setLastUpdated(new Date());
   }
@@ -297,6 +305,60 @@ export default function AdminDashboard({ adminPin, onExit }) {
               {autoRefresh ? "Auto: ON" : "Auto: OFF"}
             </button>
           </div>
+          {activeSessions.length > 0 && (
+            <Card icon={<Sparkles size={15} />} title="Conectados ahora" subtitle={`${new Set(activeSessions.map((s) => s.nombre)).size} persona(s) con sesión activa`}>
+              <div className="flex flex-wrap gap-1.5">
+                {[...new Map(activeSessions.map((s) => [s.nombre, s])).values()].map((s) => (
+                  <span key={s.nombre} className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 rounded-full px-2.5 py-1 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> {s.nombre}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-600 mt-1.5">Incluye a cualquiera logueado con su PIN, tenga o no la caja abierta — por ejemplo, alguien solo mandando mensajes en Bases.</p>
+            </Card>
+          )}
+          {refuerzos.length > 0 && (
+            <Card icon={<Users size={15} />} title="Refuerzos recientes" subtitle="Quién trabajó como refuerzo, desde y hasta cuándo">
+              <div className="space-y-1.5">
+                {refuerzos.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2 text-xs">
+                    <span className="font-bold text-indigo-300">{r.empleado}</span>
+                    <span className="text-slate-400">
+                      {new Date(r.inicio).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {" → "}
+                      {r.fin ? new Date(r.fin).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : <span className="text-emerald-400 font-bold">en curso</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+          {refuerzos.filter((r) => !r.fin).map((r) => {
+            const stats = empTodayBaseStats[r.empleado] || { contactados: 0, contestados: 0, cargaron: 0 };
+            return (
+              <Card
+                key={r.id}
+                icon={<Users size={15} />} title="Ahora mismo — refuerzo"
+                subtitle={`${r.empleado} · en bases desde las ${new Date(r.inicio).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`}
+                right={<span className="text-[9px] bg-emerald-500/15 text-emerald-400 rounded-full px-2 py-0.5 font-bold animate-pulse">EN VIVO</span>}
+              >
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase">Contactaron</p>
+                    <p className="text-lg font-black">{stats.contactados}</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase">Contestaron</p>
+                    <p className="text-lg font-black">{stats.contestados}</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase">Cargaron</p>
+                    <p className="text-lg font-black text-emerald-400">{stats.cargaron}</p>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
           {ahoraMismo && (
             <Card
               icon={<Wallet size={15} />} title="Ahora mismo"
@@ -912,7 +974,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
           <button onClick={saveCupo} className="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-lg px-3 text-xs font-bold">{cupoSaved ? "✓ Guardado" : "Guardar"}</button>
         </div>
         <p className="text-[10px] text-slate-600 mt-2">
-          Ya no hace falta asignar bases a mano: cuando un empleado entra a Bases, el sistema le arma su lista de hoy solo, priorizando primero "Principales", después "Masiva", y por último "Comprada" — hasta llegar al cupo.
+          Ya no hace falta asignar bases a mano: cuando un empleado entra a Bases, el sistema le arma su lista de hoy solo, respetando el horario real de cada uno — "Inactivos" y "Comprada" van parejos, y "Masiva" entra siempre en una porción chica (ajustable abajo) para no descuidarla nunca del todo.
         </p>
       </Card>
 
