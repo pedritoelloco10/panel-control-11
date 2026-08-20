@@ -1009,7 +1009,19 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
             <div key={d.id} className="py-2.5 border-b border-white/5 last:border-0">
               <div className="flex items-center justify-between">
                 <p className="font-bold text-sm">{d.nombre}</p>
-                <button onClick={() => viewEvents(d.id, d.nombre)} className="text-[10px] text-indigo-300 font-bold">Ver historial</button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => viewEvents(d.id, d.nombre)} className="text-[10px] text-indigo-300 font-bold">Ver historial</button>
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm(`¿Borrar la base "${d.nombre}"? Se van a borrar también sus ${s.total} contactos. No se puede deshacer.`)) return;
+                      await supabase.rpc("admin_delete_base", { input_admin_pin: adminPin, target_id: d.id });
+                      onChange();
+                    }}
+                    className="text-[10px] text-rose-400 font-bold"
+                  >
+                    Borrar
+                  </button>
+                </div>
               </div>
               <p className="text-[10px] text-slate-500 mb-1.5">{DB_TYPES[d.tipo]}</p>
               <div className="grid grid-cols-4 gap-2 text-center">
