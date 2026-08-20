@@ -8,12 +8,12 @@ body { background: #020617; }
 .input:focus { border-color: rgb(129 140 248); }
 .hint { font-size: 10.5px; color: rgb(100 116 139); margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .add-btn { display:flex; align-items:center; gap:0.3rem; font-size:0.72rem; font-weight:700; color: rgb(165 180 252); margin-top: 0.25rem; }
--- ============================================================
--- LIMPIAR CONTACTOS DE PRUEBA — antes de ir en vivo
--- Pegar entero en Supabase → SQL Editor → New query → Run
--- Esto borra TODOS los contactos y su historial de eventos.
--- Las bases (los nombres de listas) NO se tocan, siguen existiendo vacías.
--- ============================================================
-
-delete from contact_events;
-delete from contacts;
+/* Arreglo de contraste en los desplegables (select) — letra ilegible */
+select {
+  color: #e2e8f0 !important;
+  background-color: #0f172a !important;
+}
+select option {
+  color: #e2e8f0 !important;
+  background-color: #1e293b !important;
+}
