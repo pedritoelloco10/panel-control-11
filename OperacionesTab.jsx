@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, Lock } from "lucide-react";
 import { Card } from "./ui";
-import { PLATFORMS, num, money, blankOp, seedOps, GROW_BATCH } from "./lib";
+import { PLATFORMS, num, money, formatMiles, blankOp, seedOps, GROW_BATCH } from "./lib";
 import { supabase } from "./supabaseClient";
 
 export default function OperacionesTab({ draft }) {
@@ -136,7 +136,7 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
         <input
           inputMode="numeric" placeholder="Monto" value={o.monto}
           data-row={index} data-field="monto"
-          onChange={(e) => onUpdate({ monto: e.target.value.replace(/[^\d]/g, "") })}
+          onChange={(e) => onUpdate({ monto: formatMiles(e.target.value) })}
           onKeyDown={makeKeyDown("monto")}
           className="input !py-1.5 text-xs"
         />
@@ -146,7 +146,7 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
           <input
             inputMode="numeric" placeholder="Bono fichas" value={o.bono}
             data-row={index} data-field="bono"
-            onChange={(e) => onUpdate({ bono: e.target.value.replace(/[^\d]/g, "") })}
+            onChange={(e) => onUpdate({ bono: formatMiles(e.target.value) })}
             onKeyDown={makeKeyDown("bono")}
             className="input !py-1.5 text-xs"
           />
