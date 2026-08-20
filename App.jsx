@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Lock, Sparkles, X, ArrowLeft } from "lucide-react";
+import { Lock, Sparkles, X, ArrowLeft, Flame } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { useTurnoDraft } from "./useTurnoDraft";
 import EmployeePinGate from "./EmployeePinGate";
@@ -16,6 +16,7 @@ export default function App() {
   const [adminPin, setAdminPin] = useState(null); // se guarda solo en memoria mientras dura la sesión
   const [wallets, setWallets] = useState([]);
   const [identity, setIdentity] = useState(null);
+  const [urgentCount, setUrgentCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -23,6 +24,20 @@ export default function App() {
       setWallets((wal || []).map((w) => w.nombre));
     })();
   }, []);
+
+  // Se fija cada 45s si hay leads "urgentes" (contestaron y se están enfriando) —
+  // así se ve la alerta desde cualquier pantalla, no solo entrando a Bases.
+  useEffect(() => {
+    if (!identity) { setUrgentCount(0); return; }
+    let cancelled = false;
+    async function checkUrgent() {
+      const { data } = await supabase.rpc("session_urgent_queue", { input_token: identity.token });
+      if (!cancelled) setUrgentCount((data || []).length);
+    }
+    checkUrgent();
+    const interval = setInterval(checkUrgent, 45000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [identity]);
 
   const draft = useTurnoDraft(identity);
 
@@ -50,8 +65,16 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-gradient-to-b from-indigo-950/40 to-transparent" />
-      <TopBar view={view} setView={(v) => (v === "adminGate" && adminPin ? setView("admin") : setView(v))} opsCount={draft.opsFilledCount} identity={identity} onLogout={logout} />
+      <TopBar view={view} setView={(v) => (v === "adminGate" && adminPin ? setView("admin") : setView(v))} opsCount={draft.opsFilledCount} urgentCount={urgentCount} identity={identity} onLogout={logout} />
       <div className="max-w-5xl mx-auto px-4 pb-24 relative">
+        {identity && urgentCount > 0 && view !== "bases" && (
+          <button onClick={() => setView("bases")} className="w-full flex items-center gap-2 bg-rose-500/15 ring-1 ring-rose-500/40 rounded-xl px-3.5 py-2.5 mt-4 text-left animate-pulse">
+            <Flame size={16} className="text-rose-400 flex-none" />
+            <p className="text-xs text-rose-300 font-bold">
+              {urgentCount} contacto{urgentCount !== 1 ? "s" : ""} se {urgentCount !== 1 ? "están" : "está"} enfriando — tocá para verlos en Bases
+            </p>
+          </button>
+        )}
         {view === "turno" && (identity ? <TurnoForm wallets={wallets} draft={{ ...draft, submitTurno: handleSubmit }} identity={identity} goOps={() => setView("operaciones")} /> : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "operaciones" && (identity ? <OperacionesTab draft={draft} /> : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "bases" && (identity ? <BasesView identity={identity} /> : <EmployeePinGate onIdentify={setIdentity} />)}
@@ -68,11 +91,11 @@ export default function App() {
   );
 }
 
-function TopBar({ view, setView, opsCount, identity, onLogout }) {
+function TopBar({ view, setView, opsCount, urgentCount, identity, onLogout }) {
   const tabs = [
     { key: "turno", label: "Turno" },
     { key: "operaciones", label: "Operaciones", badge: opsCount },
-    { key: "bases", label: "Bases" },
+    { key: "bases", label: "Bases", badge: urgentCount, badgeUrgent: true },
     { key: "admin", label: "Admin", icon: <Lock size={11} /> },
   ];
   return (
@@ -98,7 +121,7 @@ function TopBar({ view, setView, opsCount, identity, onLogout }) {
                 className={`px-3 py-1.5 rounded-full transition flex items-center gap-1 flex-none ${active ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow shadow-indigo-950/50" : "text-slate-400"}`}
               >
                 {t.icon} {t.label}
-                {t.badge > 0 && <span className="bg-black/30 rounded-full px-1.5 text-[9px]">{t.badge}</span>}
+                {t.badge > 0 && <span className={`rounded-full px-1.5 text-[9px] ${t.badgeUrgent ? "bg-rose-500 text-white animate-pulse" : "bg-black/30"}`}>{t.badge}</span>}
               </button>
             );
           })}
