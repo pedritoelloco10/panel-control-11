@@ -40,6 +40,11 @@ export function num(v) {
   const n = parseFloat(String(v ?? "").replace(/\./g, "").replace(",", "."));
   return isNaN(n) ? 0 : n;
 }
+export function formatMiles(v) {
+  const digits = String(v ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
 export function money(n) {
   const sign = n < 0 ? "-" : "";
   return sign + "$" + Math.round(Math.abs(n || 0)).toLocaleString("es-AR");
