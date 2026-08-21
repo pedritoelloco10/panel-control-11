@@ -35,14 +35,16 @@ export default function OperacionesTab({ draft }) {
   }
 
   function updateOp(id, patch, index) {
-    const next = ops.map((o) => (o.id === id ? { ...o, ...patch } : o));
-    if ("monto" in patch && index === ops.length - 1 && patch.monto !== "") {
-      for (let i = 0; i < GROW_BATCH; i++) next.push(blankOp());
-    }
-    setOps(next);
+    setOps((prev) => {
+      const next = prev.map((o) => (o.id === id ? { ...o, ...patch } : o));
+      if ("monto" in patch && index === prev.length - 1 && patch.monto !== "") {
+        for (let i = 0; i < GROW_BATCH; i++) next.push(blankOp());
+      }
+      return next;
+    });
   }
-  function removeOp(id) { setOps(ops.filter((o) => o.id !== id)); }
-  function clearEmpty() { setOps(ops.filter((o) => o.monto !== "")); }
+  function removeOp(id) { setOps((prev) => prev.filter((o) => o.id !== id)); }
+  function clearEmpty() { setOps((prev) => prev.filter((o) => o.monto !== "")); }
 
   const filledCount = ops.filter((o) => o.monto !== "").length;
   const ventasTotal = ops.filter((o) => o.monto !== "" && o.tipo === "carga").reduce((s, o) => s + num(o.monto), 0);
