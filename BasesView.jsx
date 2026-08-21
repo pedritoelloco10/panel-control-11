@@ -74,10 +74,11 @@ export default function BasesView({ identity, onLogout }) {
     setDiscardingId(null);
   }
 
-  async function guardarRefuerzo() {
-    // Cierra la sesión de refuerzo (con el resumen del día) y de paso invalida
-    // la credencial de login, para que quede la pantalla lista para el que sigue.
-    await supabase.rpc("session_logout", { input_token: identity.token });
+  async function cerrarSesion() {
+    // Cierra la sesión de verdad en el servidor (y el turno de refuerzo si
+    // estaba abierto) antes de sacar a la persona a la pantalla de PIN.
+    const { error } = await supabase.rpc("session_logout", { input_token: identity.token });
+    if (error) { alert("No se pudo cerrar la sesión: " + error.message); return; }
     onLogout();
   }
 
@@ -113,8 +114,8 @@ export default function BasesView({ identity, onLogout }) {
           {refuerzo && (
             <Card icon={<Users size={15} />} title="Estás como refuerzo" subtitle={`Desde las ${new Date(refuerzo.inicio).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`}>
               <p className="text-slate-400 text-xs mb-2.5">Ya hay una caja principal abierta con otra persona — vos estás 100% en bases, con un cupo propio de {cupo} contactos.</p>
-              <button onClick={guardarRefuerzo} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2 rounded-xl text-xs">
-                Guardar mi turno de refuerzo
+              <button onClick={cerrarSesion} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2 rounded-xl text-xs">
+                Cerrar sesión
               </button>
             </Card>
           )}
