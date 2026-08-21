@@ -73,7 +73,7 @@ export default function App() {
 
   async function submitAdminPin() {
     setPinChecking(true);
-    const { data, error } = await supabase.rpc("verify_admin_pin", { input_pin: pinInput });
+    const { data, error } = await supabase.rpc("admin_login", { input_pin: pinInput });
     setPinChecking(false);
     if (!error && data === true) {
       setAdminPin(pinInput); setView("admin"); setPinError(false); setPinInput("");
