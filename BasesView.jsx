@@ -26,6 +26,8 @@ export default function BasesView({ identity }) {
   const [contacts, setContacts] = useState([]);
   const [urgentes, setUrgentes] = useState([]);
   const [cupo, setCupo] = useState(35);
+  const [refuerzo, setRefuerzo] = useState(null); // null = no es refuerzo, {inicio} = sí lo es
+  const [savedMsg, setSavedMsg] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -36,8 +38,13 @@ export default function BasesView({ identity }) {
 
   async function load() {
     setLoading(true); setErrMsg("");
-    const { data: cfg } = await supabase.from("app_config").select("value").eq("key", "cupo_diario_leads").single();
-    setCupo(cfg ? parseInt(cfg.value, 10) || 35 : 35);
+
+    const { data: status } = await supabase.rpc("session_my_status", { input_token: identity.token });
+    const st = status && status[0];
+    if (st) {
+      setCupo(st.cupo);
+      setRefuerzo(st.es_refuerzo ? { inicio: st.refuerzo_inicio } : null);
+    }
 
     // Repartir + traer tus contactos de hoy: todo lo hace el servidor, validando
     // tu credencial de sesión — la app nunca toca la tabla de contactos directo.
@@ -65,6 +72,13 @@ export default function BasesView({ identity }) {
     const { error } = await supabase.rpc("session_claim_urgent", { input_token: identity.token, target_id: c.id, nuevo_estado: estado, motivo: motivo || null });
     if (!error) setUrgentes(urgentes.filter((x) => x.id !== c.id));
     setDiscardingId(null);
+  }
+
+  async function guardarRefuerzo() {
+    await supabase.rpc("session_close_refuerzo", { input_token: identity.token });
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 2500);
+    load();
   }
 
   async function addContact() {
@@ -96,6 +110,14 @@ export default function BasesView({ identity }) {
 
       {!errMsg && (
         <>
+          {refuerzo && (
+            <Card icon={<Users size={15} />} title="Estás como refuerzo" subtitle={`Desde las ${new Date(refuerzo.inicio).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`}>
+              <p className="text-slate-400 text-xs mb-2.5">Ya hay una caja principal abierta con otra persona — vos estás 100% en bases, con un cupo propio de {cupo} contactos.</p>
+              <button onClick={guardarRefuerzo} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2 rounded-xl text-xs">
+                {savedMsg ? "✓ Guardado" : "Guardar mi turno de refuerzo"}
+              </button>
+            </Card>
+          )}
           {urgentes.length > 0 && (
             <Card
               icon={<Flame size={15} className="text-rose-400" />} title="Urgentes — se están enfriando"
