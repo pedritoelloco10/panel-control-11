@@ -41,7 +41,10 @@ export default function App() {
 
   const draft = useTurnoDraft(identity);
 
-  function logout() { setIdentity(null); setView("turno"); }
+  async function logout() {
+    if (identity) supabase.rpc("session_end_login", { input_token: identity.token }); // no bloquea la salida por esto
+    setIdentity(null); setView("turno");
+  }
   function exitAdmin() { setAdminPin(null); setView("turno"); }
 
   // Al cerrar el turno, se termina la sesión del empleado para que el próximo entre con su PIN.
