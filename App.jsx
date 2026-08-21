@@ -39,6 +39,23 @@ export default function App() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [identity]);
 
+  // Si alguien vuelve a entrar con el mismo PIN en otro lado, esta sesión queda
+  // invalidada del lado del servidor — acá lo detectamos y sacamos a la persona
+  // de todo el sistema (Turno, Operaciones y Bases), no solo de una pantalla.
+  useEffect(() => {
+    if (!identity) return;
+    let cancelled = false;
+    async function checkSession() {
+      const { data } = await supabase.rpc("session_valid", { input_token: identity.token });
+      if (!cancelled && data === false) {
+        alert("Tu sesión se cerró porque volvieron a entrar con este PIN en otro lugar.");
+        setIdentity(null); setView("turno");
+      }
+    }
+    const interval = setInterval(checkSession, 20000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [identity]);
+
   const draft = useTurnoDraft(identity);
 
   async function logout() {
