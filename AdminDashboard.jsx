@@ -752,6 +752,10 @@ function EmployeeManager({ employees, adminPin, onChange }) {
     await supabase.rpc("admin_deactivate_employee", { input_admin_pin: adminPin, target_id: id });
     onChange();
   }
+  async function reactivate(id) {
+    await supabase.rpc("admin_reactivate_employee", { input_admin_pin: adminPin, target_id: id });
+    onChange();
+  }
   async function add() {
     if (!newName.trim() || newPin.length !== 4) return;
     await supabase.rpc("admin_add_employee", { input_admin_pin: adminPin, new_nombre: newName.trim(), new_pin: newPin, new_recibe_leads: newRecibeLeads });
@@ -794,6 +798,19 @@ function EmployeeManager({ employees, adminPin, onChange }) {
       <button onClick={() => setNewRecibeLeads(!newRecibeLeads)} className={`text-[10px] font-bold px-2 py-1 rounded-lg ${newRecibeLeads ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-slate-500"}`}>
         {newRecibeLeads ? "✓ El nuevo participa del reparto de leads" : "El nuevo no recibe leads"}
       </button>
+      {employees.filter((e) => !e.activo).length > 0 && (
+        <div className="mt-4 pt-3 border-t border-white/5">
+          <p className="text-[10px] text-slate-500 font-semibold mb-2">Dados de baja — reactivar en vez de agregar de nuevo</p>
+          <div className="space-y-1.5">
+            {employees.filter((e) => !e.activo).map((e) => (
+              <div key={e.id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2">
+                <span className="text-xs text-slate-400">{e.nombre}</span>
+                <button onClick={() => reactivate(e.id)} className="text-[10px] font-bold text-emerald-400">Reactivar</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
