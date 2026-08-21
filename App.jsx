@@ -48,8 +48,7 @@ export default function App() {
     async function checkSession() {
       const { data } = await supabase.rpc("session_valid", { input_token: identity.token });
       if (!cancelled && data === false) {
-        alert("Tu sesión se cerró porque volvieron a entrar con este PIN en otro lugar.");
-        setIdentity(null); setView("turno");
+        setIdentity(null); setView("turno"); // sale directo, sin cartel que bloquee la pantalla
       }
     }
     const interval = setInterval(checkSession, 20000);
