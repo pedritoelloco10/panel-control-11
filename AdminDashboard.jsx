@@ -81,6 +81,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [allContactsFlat, setAllContactsFlat] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
   const [refuerzos, setRefuerzos] = useState([]);
+  const [accessLog, setAccessLog] = useState([]);
   const [poolDisponible, setPoolDisponible] = useState(0);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
@@ -136,6 +137,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
     setActiveSessions(sessions || []);
     const { data: refs } = await supabase.rpc("admin_list_refuerzos", { input_admin_pin: adminPin });
     setRefuerzos(refs || []);
+    const { data: log } = await supabase.rpc("admin_list_access_log", { input_admin_pin: adminPin });
+    setAccessLog(log || []);
 
     setLoading(false);
     setLastUpdated(new Date());
@@ -403,16 +406,16 @@ export default function AdminDashboard({ adminPin, onExit }) {
               <p className="text-[10px] text-slate-600 mt-1.5">Incluye a cualquiera logueado con su PIN, tenga o no la caja abierta — por ejemplo, alguien solo mandando mensajes en Bases.</p>
             </Card>
           )}
-          {refuerzos.length > 0 && (
-            <Card icon={<Users size={15} />} title="Refuerzos recientes" subtitle="Quién trabajó como refuerzo, desde y hasta cuándo">
+          {accessLog.length > 0 && (
+            <Card icon={<Users size={15} />} title="Accesos recientes" subtitle="Últimos 20 ingresos con PIN — empleados y admin">
               <div className="space-y-1.5">
-                {refuerzos.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2 text-xs">
-                    <span className="font-bold text-indigo-300">{r.empleado}</span>
+                {accessLog.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2 text-xs">
+                    <span className={`font-bold ${a.tipo === "admin" ? "text-amber-400" : "text-indigo-300"}`}>
+                      {a.tipo === "admin" ? "🔒 Admin" : a.nombre}
+                    </span>
                     <span className="text-slate-400">
-                      {new Date(r.inicio).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                      {" → "}
-                      {r.fin ? new Date(r.fin).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : <span className="text-emerald-400 font-bold">en curso</span>}
+                      {new Date(a.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
                 ))}
