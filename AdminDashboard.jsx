@@ -744,7 +744,9 @@ function EmployeeManager({ employees, adminPin, onChange }) {
   function startEdit(e) { setEditing(e.id); setEditName(e.nombre); setEditPin(e.pin); setEditRecibeLeads(e.recibe_leads !== false); }
   async function commitEdit() {
     if (!editName.trim() || editPin.length !== 4) return;
-    await supabase.rpc("admin_update_employee", { input_admin_pin: adminPin, target_id: editing, new_nombre: editName.trim(), new_pin: editPin, new_recibe_leads: editRecibeLeads });
+    const { data, error } = await supabase.rpc("admin_update_employee", { input_admin_pin: adminPin, target_id: editing, new_nombre: editName.trim(), new_pin: editPin, new_recibe_leads: editRecibeLeads });
+    if (error) { alert("Error al editar: " + error.message); return; }
+    if (data === false) { alert("No se pudo editar — revisá el PIN de admin."); return; }
     setEditing(null); onChange();
   }
   async function remove(id) {
@@ -753,12 +755,16 @@ function EmployeeManager({ employees, adminPin, onChange }) {
     onChange();
   }
   async function reactivate(id) {
-    await supabase.rpc("admin_reactivate_employee", { input_admin_pin: adminPin, target_id: id });
+    const { data, error } = await supabase.rpc("admin_reactivate_employee", { input_admin_pin: adminPin, target_id: id });
+    if (error) { alert("Error al reactivar: " + error.message); return; }
+    if (data === false) { alert("No se pudo reactivar — revisá el PIN de admin."); return; }
     onChange();
   }
   async function add() {
     if (!newName.trim() || newPin.length !== 4) return;
-    await supabase.rpc("admin_add_employee", { input_admin_pin: adminPin, new_nombre: newName.trim(), new_pin: newPin, new_recibe_leads: newRecibeLeads });
+    const { data, error } = await supabase.rpc("admin_add_employee", { input_admin_pin: adminPin, new_nombre: newName.trim(), new_pin: newPin, new_recibe_leads: newRecibeLeads });
+    if (error) { alert("Error al agregar: " + error.message); return; }
+    if (data === false) { alert("No se pudo agregar — revisá el PIN de admin."); return; }
     setNewName(""); setNewPin(""); setNewRecibeLeads(true); onChange();
   }
 
