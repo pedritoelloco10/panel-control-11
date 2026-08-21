@@ -149,7 +149,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
     // El refresco automático NO corre por defecto — el admin lo prende si quiere,
     // desde el interruptor en "Resumen". Así nunca se actualiza sin que vos lo pidas.
     if (tab !== "resumen" || !autoRefresh) return;
-    const interval = setInterval(loadAll, 6000);
+    const interval = setInterval(loadAll, 30000);
     return () => clearInterval(interval);
   }, [tab, autoRefresh]);
 
