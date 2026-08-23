@@ -33,8 +33,8 @@ export function downloadCsv(filename, rows, headers) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
-export const SEED_ROWS = 15;
-export const GROW_BATCH = 8;
+export const SEED_ROWS = 150;
+export const GROW_BATCH = 20;
 
 export function num(v) {
   const n = parseFloat(String(v ?? "").replace(/\./g, "").replace(",", "."));
