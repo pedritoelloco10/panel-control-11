@@ -59,9 +59,10 @@ function computeShift(shift) {
     const informadoRaw = (shift.stock_cierre || {})[p.key];
     diffFichas[p.key] = informadoRaw === undefined || informadoRaw === "" || informadoRaw == null ? null : num(informadoRaw) - esperado;
   });
-  const hasError = Math.abs(diffEfectivo) >= 1 || Object.values(diffFichas).some((d) => d !== null && Math.abs(d) >= 1);
+  const hasErrorRaw = Math.abs(diffEfectivo) >= 1 || Object.values(diffFichas).some((d) => d !== null && Math.abs(d) >= 1);
+  const hasError = hasErrorRaw && !shift.error_justificado; // justificado no cuenta para las estadísticas
   return {
-    shift, ventasTotal, retirosTotal, bajadasTotal, bajadasFichas, bajadasEfectivo, bajadasGasto, gastosDetalle, netoCaja, bonoTotal, diffEfectivo, diffFichas, hasError,
+    shift, ventasTotal, retirosTotal, bajadasTotal, bajadasFichas, bajadasEfectivo, bajadasGasto, gastosDetalle, netoCaja, bonoTotal, diffEfectivo, diffFichas, hasError, hasErrorRaw,
     nuevos, derivados, cargasLista, montoLista, cargasCount, retirosCount, movimientosCount,
     opsCount: (shift.ops || []).length, porPlataforma,
   };
@@ -534,6 +535,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
               onDelete={async (id) => { await supabase.from("shifts").update({ archivado: true }).eq("id", id); setExpanded(null); loadAll(); }}
               onOpenOps={setOpsModal}
+              adminPin={adminPin} onChange={loadAll}
             />
           ))}
         </>
@@ -697,7 +699,7 @@ function PlataformaBreakdown({ porPlataforma }) {
   );
 }
 
-function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
+function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChange }) {
   const s = c.shift;
   const ok = !c.hasError;
   return (
@@ -753,9 +755,22 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
             </div>
           )}
           {s.notas && <div><p className="text-slate-500 mb-1 font-semibold">Notas</p><p className="italic text-slate-300">{s.notas}</p></div>}
-          {c.hasError && (
-            <div className="bg-amber-500/10 ring-1 ring-amber-500/30 rounded-xl p-3">
-              <p className="text-amber-400 font-bold mb-1.5 flex items-center gap-1.5">⚠️ Dónde está la diferencia</p>
+          {c.hasErrorRaw && (
+            <div className={`rounded-xl p-3 ${s.error_justificado ? "bg-white/5 ring-1 ring-white/10" : "bg-amber-500/10 ring-1 ring-amber-500/30"}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className={`font-bold flex items-center gap-1.5 ${s.error_justificado ? "text-slate-400" : "text-amber-400"}`}>
+                  {s.error_justificado ? "✓ Justificado — no cuenta en las estadísticas" : "⚠️ Dónde está la diferencia"}
+                </p>
+                <button
+                  onClick={async () => {
+                    await supabase.rpc("admin_justify_shift", { input_admin_pin: adminPin, target_id: s.id, justificado: !s.error_justificado });
+                    onChange();
+                  }}
+                  className="text-[10px] font-bold text-indigo-300 underline flex-none"
+                >
+                  {s.error_justificado ? "Deshacer" : "Marcar como justificado"}
+                </button>
+              </div>
               <div className="space-y-1 text-[11px]">
                 {Math.abs(c.diffEfectivo) >= 1 && (
                   <p>
