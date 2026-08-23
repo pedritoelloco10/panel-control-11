@@ -66,7 +66,10 @@ export default function App() {
   // Al cerrar el turno, se termina la sesión del empleado para que el próximo entre con su PIN.
   async function handleSubmit() {
     const ok = await draft.submitTurno();
-    if (ok) setIdentity(null);
+    if (ok) {
+      if (identity) supabase.rpc("session_end_login", { input_token: identity.token });
+      setIdentity(null);
+    }
     return ok;
   }
 
