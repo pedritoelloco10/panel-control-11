@@ -316,7 +316,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
             >
               <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Caja total ahora</p>
               <p className="text-3xl font-black text-emerald-400 mb-3">{money(ahoraMismo.cajaTotal)}</p>
-              <div className="grid grid-cols-3 gap-2 mb-2">
+              <div className="grid grid-cols-4 gap-2 mb-2">
                 <div className="bg-white/5 rounded-lg p-2.5 text-center">
                   <p className="text-[9px] text-slate-500 uppercase">Vendido</p>
                   <p className="text-base font-black text-emerald-400">{money(ahoraMismo.ventasTurno)}</p>
@@ -325,8 +325,14 @@ export default function AdminDashboard({ adminPin, onExit }) {
                   <p className="text-[9px] text-slate-500 uppercase">Premios</p>
                   <p className="text-base font-black text-rose-400">{money(ahoraMismo.premiosTurno)}</p>
                 </div>
+                <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                  <p className="text-[9px] text-slate-500 uppercase">Neto</p>
+                  <p className={`text-base font-black ${(ahoraMismo.ventasTurno - ahoraMismo.premiosTurno) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    {money(ahoraMismo.ventasTurno - ahoraMismo.premiosTurno)}
+                  </p>
+                </div>
                 <button
-                  onClick={() => setOpsModal({ title: `${ahoraMismo.responsable} · ${ahoraMismo.enVivo ? "en vivo" : "último cierre"}`, ops: ahoraMismo.ops })}
+                  onClick={() => setOpsModal({ title: `${ahoraMismo.responsable} · ${ahoraMismo.enVivo ? "en vivo" : "último cierre"}`, ops: ahoraMismo.ops, live: ahoraMismo.enVivo })}
                   className="bg-white/5 rounded-lg p-2.5 text-center ring-1 ring-transparent hover:ring-indigo-400/40"
                 >
                   <p className="text-[9px] text-slate-500 uppercase">Operaciones</p>
@@ -569,43 +575,71 @@ function DateRangeFilter({ rangeKey, dateFrom, dateTo, onPreset, onFrom, onTo })
 
 function OpsSheetModal({ data, onClose }) {
   if (!data) return null;
+  const ops = data.ops || [];
+  const splitByPlatform = !data.live;
+
+  function renderTable(rows, showIndexFrom = 0) {
+    return (
+      <table className="w-full text-xs mb-4">
+        <thead className="bg-slate-900">
+          <tr className="text-slate-500 text-left">
+            <th className="py-2 px-2 font-semibold">#</th>
+            <th className="py-2 px-2 font-semibold">Plataforma</th>
+            <th className="py-2 px-2 font-semibold">Tipo</th>
+            <th className="py-2 px-2 font-semibold text-right">Monto</th>
+            <th className="py-2 px-2 font-semibold text-right">Bono</th>
+            <th className="py-2 px-2 font-semibold">Origen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr><td colSpan={6} className="py-6 text-center text-slate-600 italic">Sin operaciones.</td></tr>
+          )}
+          {rows.map((o, i) => (
+            <tr key={o.id || i} className="border-t border-white/5">
+              <td className="py-2 px-2 text-slate-600">{showIndexFrom + i + 1}</td>
+              <td className="py-2 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
+              <td className={`py-2 px-2 font-bold ${o.tipo === "carga" ? "text-emerald-400" : "text-rose-400"}`}>{o.tipo === "carga" ? "Venta" : "Premio"}</td>
+              <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
+              <td className="py-2 px-2 text-right text-slate-500">{o.bono ? money(num(o.bono)) : "—"}</td>
+              <td className="py-2 px-2 text-slate-400">{o.origen || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  const bet = ops.filter((o) => o.plataforma === "B");
+  const gana = ops.filter((o) => o.plataforma === "G");
+  const otras = ops.filter((o) => o.plataforma !== "B" && o.plataforma !== "G");
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto">
       <div className="max-w-3xl mx-auto p-4">
         <div className="flex items-center justify-between mb-4 sticky top-0 bg-slate-950 pt-1 pb-3 z-10">
           <div>
             <h3 className="font-bold text-lg">Hoja de operaciones</h3>
-            <p className="text-slate-500 text-xs">{data.title} · {(data.ops || []).length} operaciones</p>
+            <p className="text-slate-500 text-xs">{data.title} · {ops.length} operaciones</p>
           </div>
           <button onClick={onClose} className="bg-white/5 ring-1 ring-white/10 rounded-lg p-2"><X size={16} /></button>
         </div>
-        <table className="w-full text-xs">
-          <thead className="bg-slate-900">
-            <tr className="text-slate-500 text-left">
-              <th className="py-2 px-2 font-semibold">#</th>
-              <th className="py-2 px-2 font-semibold">Plataforma</th>
-              <th className="py-2 px-2 font-semibold">Tipo</th>
-              <th className="py-2 px-2 font-semibold text-right">Monto</th>
-              <th className="py-2 px-2 font-semibold text-right">Bono</th>
-              <th className="py-2 px-2 font-semibold">Origen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data.ops || []).length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-slate-600 italic">Sin operaciones cargadas en este turno.</td></tr>
+        {!splitByPlatform ? (
+          renderTable(ops)
+        ) : (
+          <>
+            <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">BET — {bet.length} operaciones</p>
+            {renderTable(bet)}
+            <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">GANA — {gana.length} operaciones</p>
+            {renderTable(gana)}
+            {otras.length > 0 && (
+              <>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Otras — {otras.length} operaciones</p>
+                {renderTable(otras)}
+              </>
             )}
-            {(data.ops || []).map((o, i) => (
-              <tr key={o.id || i} className="border-t border-white/5">
-                <td className="py-2 px-2 text-slate-600">{i + 1}</td>
-                <td className="py-2 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
-                <td className={`py-2 px-2 font-bold ${o.tipo === "carga" ? "text-emerald-400" : "text-rose-400"}`}>{o.tipo === "carga" ? "Venta" : "Premio"}</td>
-                <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
-                <td className="py-2 px-2 text-right text-slate-500">{o.bono ? money(num(o.bono)) : "—"}</td>
-                <td className="py-2 px-2 text-slate-400">{o.origen || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          </>
+        )}
       </div>
     </div>
   );
@@ -673,7 +707,11 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
           {expanded ? <ChevronDown size={15} className="text-slate-500" /> : <ChevronRight size={15} className="text-slate-500" />}
           <div>
             <p className="font-bold text-sm">{s.fecha} · {s.turno_label} ({s.hora_inicio}) · <span className="text-indigo-300">{s.responsable}</span></p>
-            <p className="text-[11px] text-slate-500">Ventas {money(c.ventasTotal)} · Neto {money(c.netoCaja)} · {c.opsCount} registros</p>
+            <p className="text-[11px] text-slate-500">
+              Ventas {money(c.ventasTotal)} · Neto{" "}
+              <span className={`font-bold ${c.netoCaja >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{money(c.netoCaja)}</span>
+              {" "}· {c.opsCount} registros
+            </p>
           </div>
         </div>
         {ok ? <CheckCircle2 size={16} className="text-emerald-400 flex-none" /> : <AlertTriangle size={16} className="text-amber-400 flex-none" />}
@@ -717,7 +755,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
           {s.notas && <div><p className="text-slate-500 mb-1 font-semibold">Notas</p><p className="italic text-slate-300">{s.notas}</p></div>}
           <div>
             <button
-              onClick={() => onOpenOps({ title: `${s.responsable} · ${s.fecha} · ${s.turno_label}`, ops: s.ops })}
+              onClick={() => onOpenOps({ title: `${s.responsable} · ${s.fecha} · ${s.turno_label}`, ops: s.ops, live: false })}
               className="text-indigo-300 font-bold underline flex items-center gap-1"
             >
               Hoja de operaciones ({(s.ops || []).length}) <ChevronRight size={13} />
