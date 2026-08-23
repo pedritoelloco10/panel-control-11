@@ -753,6 +753,35 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps }) {
             </div>
           )}
           {s.notas && <div><p className="text-slate-500 mb-1 font-semibold">Notas</p><p className="italic text-slate-300">{s.notas}</p></div>}
+          {c.hasError && (
+            <div className="bg-amber-500/10 ring-1 ring-amber-500/30 rounded-xl p-3">
+              <p className="text-amber-400 font-bold mb-1.5 flex items-center gap-1.5">⚠️ Dónde está la diferencia</p>
+              <div className="space-y-1 text-[11px]">
+                {Math.abs(c.diffEfectivo) >= 1 && (
+                  <p>
+                    <span className="text-slate-400">Efectivo:</span>{" "}
+                    <span className={`font-bold ${c.diffEfectivo > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {c.diffEfectivo > 0 ? "sobran " : "faltan "}{money(Math.abs(c.diffEfectivo))}
+                    </span>
+                    {" "}respecto a lo esperado
+                  </p>
+                )}
+                {PLATFORMS.map((p) => {
+                  const d = c.diffFichas[p.key];
+                  if (d === null || Math.abs(d) < 1) return null;
+                  return (
+                    <p key={p.key}>
+                      <span className="text-slate-400">Fichas {p.label}:</span>{" "}
+                      <span className={`font-bold ${d > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                        {d > 0 ? "sobran " : "faltan "}{Math.round(Math.abs(d)).toLocaleString("es-AR")}
+                      </span>
+                      {" "}respecto a lo esperado
+                    </p>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div>
             <button
               onClick={() => onOpenOps({ title: `${s.responsable} · ${s.fecha} · ${s.turno_label}`, ops: s.ops, live: false })}
