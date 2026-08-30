@@ -85,7 +85,7 @@ export function useTurnoDraft(identity) {
       }
       const { data: lastClosed } = await supabase
         .from("shifts").select("*").eq("status", "cerrado").eq("archivado", false)
-        .order("updated_at", { ascending: false }).limit(1);
+        .order("cerrado_at", { ascending: false, nullsFirst: false }).limit(1);
       const prev = lastClosed && lastClosed[0];
       const carriedBill = prev ? prev.bill_cierre || {} : {};
       const carriedStock = prev ? prev.stock_cierre || { B: "", G: "" } : { B: "", G: "" };
@@ -177,6 +177,7 @@ export function useTurnoDraft(identity) {
       stock_inicio: stockInicio, stock_cierre: stockCierreInf,
       ops: opsFilled, bajadas, movs, notas,
       updated_at: new Date().toISOString(),
+      cerrado_at: new Date().toISOString(),
     }).eq("id", shiftId);
     setSaving(false);
     if (updErr) { setError("No se pudo cerrar el turno: " + updErr.message); return false; }
