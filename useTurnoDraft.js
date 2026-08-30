@@ -13,6 +13,10 @@ export function useTurnoDraft(identity) {
   // Si ya hay un turno abierto a nombre de OTRA persona, no se abre uno nuevo:
   // guarda quién lo tiene abierto para avisarle al resto en vez de duplicar la caja.
   const [otherOpenBy, setOtherOpenBy] = useState(null);
+  // Si la persona tiene su sesión de refuerzo abierta (todavía no tocó "Cerrar
+  // sesión" en Bases), no puede abrir Turno bajo ningún caso — sin importar si el
+  // principal ya cerró su caja o no. Evita que alguien "tome" la caja sin querer.
+  const [refuerzoPropioAbierto, setRefuerzoPropioAbierto] = useState(false);
 
   const [meta, setMeta] = useState({ fecha: todayStr(), horaInicio: nowStr(), horaFin: "", responsable: "" });
   const [billInicio, setBillInicio] = useState({});
@@ -37,6 +41,7 @@ export function useTurnoDraft(identity) {
     (async () => {
       setReady(false);
       setOtherOpenBy(null);
+      setRefuerzoPropioAbierto(false);
       const { data: mine } = await supabase
         .from("shifts").select("*").eq("status", "abierto").eq("archivado", false).eq("responsable", identity.nombre)
         .order("created_at", { ascending: false }).limit(1);
@@ -52,6 +57,19 @@ export function useTurnoDraft(identity) {
         // (ya no se usa mensajes_enviados)
         setReady(true);
         return;
+      }
+      // No tengo turno propio abierto todavía. Si estoy trabajando como refuerzo
+      // (sesión de refuerzo sin cerrar), no puedo abrir uno nuevo — tiene que cerrar
+      // su sesión de refuerzo en Bases primero. Esto es así aunque el principal ya
+      // haya cerrado su caja: evita que alguien "tome" la caja a medio camino.
+      if (identity.token) {
+        const { data: esRefuerzo } = await supabase.rpc("tiene_refuerzo_abierto", { input_token: identity.token });
+        if (cancelled) return;
+        if (esRefuerzo) {
+          setRefuerzoPropioAbierto(true);
+          setReady(true);
+          return;
+        }
       }
       // No tengo turno propio abierto. Antes de crear uno, me fijo si YA hay un turno
       // abierto a nombre de otra persona: si lo hay, no creo uno nuevo (evita duplicar
@@ -169,7 +187,7 @@ export function useTurnoDraft(identity) {
   }
 
   return {
-    ready, carriedFrom, otherOpenBy, meta, setMeta, billInicio, billCierre, setBillCierre,
+    ready, carriedFrom, otherOpenBy, refuerzoPropioAbierto, meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf, ops, setOps,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
     expected, cierreCheck,
