@@ -72,6 +72,7 @@ function computeShift(shift) {
   const hasError = efectivoError || Object.values(fichasError).some(Boolean); // lo justificado no cuenta para las estadísticas
   return {
     shift, ventasTotal, retirosTotal, bajadasTotal, bajadasFichas, bajadasEfectivo, bajadasGasto, gastosDetalle, netoCaja, bonoTotal, diffEfectivo, diffFichas, hasError, hasErrorRaw, efectivoErrorRaw, fichasErrorRaw,
+    billInicioTotal, billCierreTotal,
     nuevos, derivados, cargasLista, montoLista, cargasCount, retirosCount, movimientosCount,
     opsCount: (shift.ops || []).length, porPlataforma,
   };
@@ -95,12 +96,23 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [poolDisponible, setPoolDisponible] = useState(0);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+  const [turnosVisibles, setTurnosVisibles] = useState(15);
+  const [archivados, setArchivados] = useState(null); // null = no cargados todavía
   const [rangeKey, setRangeKey] = useState("7d");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [opsModal, setOpsModal] = useState(null);
+
+  async function loadArchivados() {
+    const { data } = await supabase.from("shifts").select("*").eq("archivado", true).order("updated_at", { ascending: false }).limit(50);
+    setArchivados(data || []);
+  }
+  async function restaurarTurno(id) {
+    await supabase.from("shifts").update({ archivado: false }).eq("id", id);
+    await loadArchivados(); loadAll();
+  }
 
   async function loadAll() {
     setLoading(true);
@@ -412,14 +424,20 @@ export default function AdminDashboard({ adminPin, onExit }) {
           })}
           {activeSessions.length > 0 && (
             <Card icon={<Sparkles size={15} />} title="Conectados ahora" subtitle={`${new Set(activeSessions.map((s) => s.nombre)).size} persona(s) con sesión activa`}>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="space-y-1.5">
                 {[...new Map(activeSessions.map((s) => [s.nombre, s])).values()].map((s) => (
-                  <span key={s.nombre} className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 rounded-full px-2.5 py-1 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> {s.nombre}
-                  </span>
+                  <div key={s.nombre} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-1.5">
+                    <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> {s.nombre}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      entró {new Date(s.entro_a).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                      {" · vence "}{new Date(s.vence_a).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-600 mt-1.5">Incluye a cualquiera logueado con su PIN, tenga o no la caja abierta — por ejemplo, alguien solo mandando mensajes en Bases.</p>
+              <p className="text-[10px] text-slate-600 mt-1.5">Incluye a cualquiera logueado con su PIN, tenga o no la caja abierta. Si alguien aparece acá pero ya no está trabajando, va a desaparecer solo cuando venza (hasta 14hs) o cuando vuelva a entrar con su PIN.</p>
             </Card>
           )}
           {accessLog.length > 0 && (
@@ -537,8 +555,30 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
       {tab === "turnos" && (
         <>
-          <h3 className="font-bold text-sm mb-2 text-slate-400">Detalle de turnos ({computedAll.length})</h3>
-          {computedAll.map((c) => (
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-sm text-slate-400">Detalle de turnos ({computedAll.length})</h3>
+            <button
+              onClick={() => { if (archivados === null) loadArchivados(); else setArchivados(null); }}
+              className="text-[10px] font-bold text-indigo-300 underline"
+            >
+              {archivados === null ? "Ver archivados" : "Ocultar archivados"}
+            </button>
+          </div>
+          {archivados !== null && (
+            <div className="bg-white/[0.02] ring-1 ring-white/5 rounded-2xl p-3 mb-3">
+              <p className="text-[10px] text-slate-500 font-semibold mb-2">Archivados ({archivados.length}) — no cuentan en ninguna estadística</p>
+              {archivados.length === 0 && <p className="text-slate-600 text-xs italic">No hay turnos archivados.</p>}
+              <div className="space-y-1.5">
+                {archivados.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2 text-xs">
+                    <span className="text-slate-400">{s.fecha} · {s.turno_label} · <span className="text-indigo-300 font-bold">{s.responsable}</span></span>
+                    <button onClick={() => restaurarTurno(s.id)} className="text-emerald-400 font-bold text-[10px]">Restaurar</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {computedAll.slice(0, turnosVisibles).map((c) => (
             <ShiftRow
               key={c.shift.id} c={c} expanded={expanded === c.shift.id}
               onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
@@ -547,6 +587,14 @@ export default function AdminDashboard({ adminPin, onExit }) {
               adminPin={adminPin} onChange={loadAll}
             />
           ))}
+          {turnosVisibles < computedAll.length && (
+            <button
+              onClick={() => setTurnosVisibles((n) => n + 15)}
+              className="w-full bg-white/5 ring-1 ring-white/10 rounded-xl py-2.5 text-xs font-bold text-slate-400 mt-1"
+            >
+              Cargar 15 más ({computedAll.length - turnosVisibles} restantes)
+            </button>
+          )}
         </>
       )}
 
@@ -717,7 +765,9 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
         <div className="flex items-center gap-2.5">
           {expanded ? <ChevronDown size={15} className="text-slate-500" /> : <ChevronRight size={15} className="text-slate-500" />}
           <div>
-            <p className="font-bold text-sm">{s.fecha} · {s.turno_label} ({s.hora_inicio}) · <span className="text-indigo-300">{s.responsable}</span></p>
+            <p className="font-bold text-sm">
+              {s.fecha} · {s.turno_label} ({s.hora_inicio}{s.hora_fin ? ` → ${s.hora_fin}` : ""}) · <span className="text-indigo-300">{s.responsable}</span>
+            </p>
             <p className="text-[11px] text-slate-500">
               Ventas {money(c.ventasTotal)} · Neto{" "}
               <span className={`font-bold ${c.netoCaja >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{money(c.netoCaja)}</span>
@@ -732,7 +782,9 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
           <PlataformaBreakdown porPlataforma={c.porPlataforma} />
           <p className="text-slate-400">Nuevos: {c.nuevos} · Derivados: {c.derivados} · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
           <div>
-            <p className="text-slate-500 mb-1 font-semibold">Billeteras — inicio → cierre</p>
+            <p className="text-slate-500 mb-1 font-semibold">
+              Billeteras — inicio → cierre · total al cierre <span className="text-slate-200">{money(c.billCierreTotal)}</span>
+            </p>
             <div className="grid grid-cols-2 gap-1">
               {Object.keys({ ...(s.bill_inicio || {}), ...(s.bill_cierre || {}) }).map((w) => (
                 <p key={w} className="text-slate-400 flex justify-between bg-black/20 rounded px-2 py-1">
@@ -753,7 +805,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
           </div>
           {(s.bajadas || []).length > 0 && (
             <div>
-              <p className="text-slate-500 mb-1 font-semibold">Bajadas ({s.bajadas.length})</p>
+              <p className="text-slate-500 mb-1 font-semibold">Bajadas ({s.bajadas.length}) — total {money(c.bajadasTotal)}</p>
               {s.bajadas.map((b, i) => (<p key={i} className="text-slate-400">{b.billetera} — {money(num(b.monto))} → {b.destino || "sin destino"} {b.nota && `· ${b.nota}`}</p>))}
             </div>
           )}
