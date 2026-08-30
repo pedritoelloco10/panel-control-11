@@ -117,7 +117,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
   async function loadAll() {
     setLoading(true);
     const [{ data: closedShifts }, { data: live }, { data: emp }, { data: wal }, { data: dbList }] = await Promise.all([
-      supabase.from("shifts").select("*").eq("status", "cerrado").eq("archivado", false).order("created_at", { ascending: false }),
+      supabase.from("shifts").select("*").eq("status", "cerrado").eq("archivado", false).order("cerrado_at", { ascending: false, nullsFirst: false }),
       supabase.from("shifts").select("*").eq("status", "abierto").eq("archivado", false).order("updated_at", { ascending: false }),
       supabase.rpc("admin_list_employees", { input_admin_pin: adminPin }),
       supabase.from("wallets").select("*").order("orden"),
