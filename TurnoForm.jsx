@@ -7,7 +7,22 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
   const { meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
-    expected, cierreCheck, saving, error, saved, submitTurno, opsFilledCount, carriedFrom, otherOpenBy } = draft;
+    expected, cierreCheck, saving, error, saved, submitTurno, opsFilledCount, carriedFrom, otherOpenBy, refuerzoPropioAbierto } = draft;
+
+  if (refuerzoPropioAbierto) {
+    return (
+      <div className="pt-5">
+        <Card icon={<Lock size={15} />} title="Estás trabajando como refuerzo" subtitle="No podés abrir una caja mientras tanto">
+          <p className="text-sm text-slate-300 mb-2">
+            Tenés tu sesión de refuerzo abierta en <b>Bases</b>. Mientras siga así, no podés abrir Turno — aunque en este momento no haya ninguna otra caja abierta.
+          </p>
+          <p className="text-sm text-slate-400">
+            Si terminaste de trabajar como refuerzo, andá a <b>Bases</b> y tocá <b>"Cerrar sesión"</b>. Si en cambio necesitás tomar la caja porque nadie más va a abrirla, avisale a tu encargado primero.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   if (otherOpenBy) {
     return (
