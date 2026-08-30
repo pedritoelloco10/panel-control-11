@@ -66,7 +66,7 @@ export function useTurnoDraft(identity) {
         return;
       }
       const { data: lastClosed } = await supabase
-        .from("shifts").select("*").eq("status", "cerrado")
+        .from("shifts").select("*").eq("status", "cerrado").eq("archivado", false)
         .order("updated_at", { ascending: false }).limit(1);
       const prev = lastClosed && lastClosed[0];
       const carriedBill = prev ? prev.bill_cierre || {} : {};
