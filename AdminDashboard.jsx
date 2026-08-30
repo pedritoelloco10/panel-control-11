@@ -106,7 +106,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [opsModal, setOpsModal] = useState(null);
 
   async function loadArchivados() {
-    const { data } = await supabase.from("shifts").select("*").eq("archivado", true).order("updated_at", { ascending: false }).limit(50);
+    const { data } = await supabase.from("shifts").select("*").eq("archivado", true).order("updated_at", { ascending: false }).limit(200);
     setArchivados(data || []);
   }
   async function restaurarTurno(id) {
@@ -465,7 +465,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
                   <button
                     onClick={async () => {
                       if (!window.confirm(`¿Archivar el turno abierto de ${s.responsable}? Es para pruebas viejas o turnos trabados. Queda guardado, no se pierde, pero se libera la caja para abrir uno nuevo.`)) return;
-                      await supabase.from("shifts").update({ archivado: true }).eq("id", s.id); loadAll();
+                      await supabase.from("shifts").update({ archivado: true, updated_at: new Date().toISOString() }).eq("id", s.id); loadAll();
                     }}
                     className="text-rose-400 text-[10px] font-bold flex items-center gap-1"
                   >
@@ -571,7 +571,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
               <div className="space-y-1.5">
                 {archivados.map((s) => (
                   <div key={s.id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2 text-xs">
-                    <span className="text-slate-400">{s.fecha} · {s.turno_label} · <span className="text-indigo-300 font-bold">{s.responsable}</span></span>
+                    <span className="text-slate-400">
+                      {s.fecha} · {s.hora_inicio?.slice(0, 5)}{s.hora_fin ? ` → ${s.hora_fin.slice(0, 5)}` : ""} · <span className="text-indigo-300 font-bold">{s.responsable}</span>
+                    </span>
                     <button onClick={() => restaurarTurno(s.id)} className="text-emerald-400 font-bold text-[10px]">Restaurar</button>
                   </div>
                 ))}
@@ -582,7 +584,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <ShiftRow
               key={c.shift.id} c={c} expanded={expanded === c.shift.id}
               onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
-              onDelete={async (id) => { await supabase.from("shifts").update({ archivado: true }).eq("id", id); setExpanded(null); loadAll(); }}
+              onDelete={async (id) => { await supabase.from("shifts").update({ archivado: true, updated_at: new Date().toISOString() }).eq("id", id); setExpanded(null); loadAll(); }}
               onOpenOps={setOpsModal}
               adminPin={adminPin} onChange={loadAll}
             />
