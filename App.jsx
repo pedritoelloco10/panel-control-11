@@ -58,7 +58,10 @@ export default function App() {
   const draft = useTurnoDraft(identity);
 
   async function logout() {
-    if (identity) supabase.rpc("session_end_login", { input_token: identity.token }); // no bloquea la salida por esto
+    if (identity) {
+      try { await supabase.rpc("session_end_login", { input_token: identity.token }); }
+      catch (e) { console.error("No se pudo cerrar la sesión en el servidor:", e); }
+    }
     setIdentity(null); setView("turno");
   }
   function exitAdmin() { setAdminPin(null); setView("turno"); }
@@ -67,7 +70,10 @@ export default function App() {
   async function handleSubmit() {
     const ok = await draft.submitTurno();
     if (ok) {
-      if (identity) supabase.rpc("session_end_login", { input_token: identity.token });
+      if (identity) {
+        try { await supabase.rpc("session_end_login", { input_token: identity.token }); }
+        catch (e) { console.error("No se pudo cerrar la sesión en el servidor:", e); }
+      }
       setIdentity(null);
     }
     return ok;
