@@ -299,8 +299,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const subtabs = [
     { key: "resumen", label: "Resumen", icon: <BarChart3 size={12} /> },
     { key: "turnos", label: "Turnos", icon: <TrendingUp size={12} /> },
-    { key: "clientes", label: "Clientes", icon: <Users size={12} /> },
+    { key: "analisis", label: "Análisis", icon: <TrendingUp size={12} /> },
     { key: "bases", label: "Bases", icon: <Database size={12} /> },
+    { key: "clientes", label: "Clientes", icon: <Users size={12} /> },
     { key: "empleados", label: "Empleados", icon: <Users size={12} /> },
     { key: "billeteras", label: "Billeteras", icon: <Wallet size={12} /> },
   ];
@@ -476,6 +477,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
             </Card>
           )}
 
+        </>
+      )}
+
+      {tab === "analisis" && (
+        <>
           <DateRangeFilter rangeKey={rangeKey} dateFrom={dateFrom} dateTo={dateTo} onPreset={applyPreset} onFrom={(v) => { setRangeKey("custom"); setDateFrom(v); }} onTo={(v) => { setRangeKey("custom"); setDateTo(v); }} />
 
           <h3 className="font-bold text-sm mb-2 mt-4 text-slate-400">Análisis de totales ({computed.length} turnos)</h3>
@@ -550,6 +556,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               </div>
             ))}
           </Card>
+
         </>
       )}
 
