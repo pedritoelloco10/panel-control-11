@@ -46,7 +46,6 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
           <CheckCircle2 size={16} /> Turno guardado
         </div>
       )}
-      {error && <p className="text-rose-400 text-xs text-center mb-3 bg-rose-500/10 rounded-lg py-2 px-3">{error}</p>}
 
       <Card icon={<Users size={15} />} title="Datos del turno" subtitle={`Operando como ${identity?.nombre || "—"}`}>
         <div className="grid grid-cols-2 gap-2 mb-3">
@@ -196,6 +195,8 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
           <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} className="input resize-none" placeholder="Algo puntual para dejar anotado..." />
         </Field>
       </Card>
+
+      {error && <p className="text-rose-400 text-xs text-center mb-3 bg-rose-500/10 rounded-lg py-2 px-3">{error}</p>}
 
       <button
         onClick={submitTurno} disabled={saving}
