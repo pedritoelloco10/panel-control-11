@@ -1,6 +1,15 @@
 -- ============================================================
 -- Esquema de la base para el panel de control de Diego
 -- Pegar entero en Supabase → SQL Editor → New query → Run
+--
+-- Nota: las columnas/tablas agregadas después del bootstrap original
+-- (recibe_leads, estado/motivo_descarte/ultimo_contacto/asignado_a/
+-- fecha_asignacion en contacts, app_config, clientes) se reconstruyeron
+-- leyendo cómo las usa el código de la app — no se verificaron tipo por
+-- tipo contra la base real de producción (no hay forma de inspeccionarla
+-- desde este entorno). Sirven para levantar un proyecto nuevo desde cero;
+-- si eso llega a pasar, revisá tipos y defaults contra lo que espere el
+-- resto del código antes de confiar en esto a ciegas.
 -- ============================================================
 
 create extension if not exists "pgcrypto";
@@ -11,6 +20,7 @@ create table employees (
   nombre text not null,
   pin text not null unique,
   activo boolean not null default true,
+  recibe_leads boolean not null default true, -- si no, no participa del reparto automático de leads
   created_at timestamptz not null default now()
 );
 
@@ -49,6 +59,10 @@ create table shifts (
 );
 create index shifts_status_idx on shifts (status);
 create index shifts_fecha_idx on shifts (fecha);
+-- A lo sumo un turno "abierto" y no archivado a la vez en todo el sistema —
+-- evita que una carrera (dos personas identificándose casi juntas) termine
+-- abriendo dos cajas al mismo tiempo.
+create unique index shifts_un_solo_abierto on shifts (status) where status = 'abierto' and archivado = false;
 
 -- ---------- Bases de datos de clientes ----------
 create table databases (
@@ -70,6 +84,14 @@ create table contacts (
   agregado_por text, -- 'admin' o nombre de empleado
   trabajada_por text,
   fecha_trabajo date,
+  -- Estado del lead (nuevo/contactado/contestado/interesado/cargado/descartado,
+  -- ver LEAD_STATES en lib.js) y su asignación diaria por el reparto automático.
+  -- Nulo se trata como "nuevo" en el código (c.estado || "nuevo").
+  estado text,
+  motivo_descarte text,
+  ultimo_contacto date,
+  asignado_a text, -- nombre de empleado, igual que trabajada_por/agregado_por
+  fecha_asignacion date,
   created_at timestamptz not null default now()
 );
 create index contacts_base_idx on contacts (base_id);
@@ -99,6 +121,19 @@ create table assignments (
 );
 create index assignments_fecha_idx on assignments (fecha);
 
+-- ---------- Configuración general (clave/valor) ----------
+create table app_config (
+  key text primary key,
+  value text
+);
+insert into app_config (key, value) values ('cupo_diario_leads', '35');
+
+-- ---------- Identificadores de cliente ya vistos (autocompletar en Operaciones) ----------
+create table clientes (
+  identificador text primary key,
+  created_at timestamptz not null default now()
+);
+
 -- ============================================================
 -- Seguridad: como no usamos login por email (es PIN interno), el acceso de
 -- verdad lo dan las funciones admin_*/session_* de más abajo, todas
@@ -118,6 +153,8 @@ alter table databases enable row level security;
 alter table contacts enable row level security;
 alter table contact_events enable row level security;
 alter table assignments enable row level security;
+alter table app_config enable row level security;
+alter table clientes enable row level security;
 
 -- Sin política = todo acceso directo denegado (solo entra por las funciones
 -- security definer, que no dependen de RLS).
@@ -132,6 +169,15 @@ create policy "lectura publica" on databases for select using (true);
 
 -- shifts: sin blindar todavía (ver comentario arriba).
 create policy "acceso app" on shifts for all using (true) with check (true);
+
+-- app_config: la app escribe el cupo diario de leads directo desde el cliente,
+-- sin pasar por ninguna función admin_* todavía — falta blindar esto también
+-- (crear un admin_set_config y cerrar esta política), pendiente de etapa 2.
+create policy "acceso app" on app_config for all using (true) with check (true);
+
+-- clientes: identificadores para autocompletar en Operaciones, sin datos
+-- sensibles — se deja abierta, cualquier empleado logueado la usa directo.
+create policy "acceso app" on clientes for all using (true) with check (true);
 
 -- ---------- Datos iniciales ----------
 insert into employees (nombre, pin) values

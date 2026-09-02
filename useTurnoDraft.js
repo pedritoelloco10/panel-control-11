@@ -117,7 +117,25 @@ export function useTurnoDraft(identity) {
         })
         .select().single();
       if (cancelled) return;
-      if (insErr) { setError("No se pudo abrir el turno: " + insErr.message); setReady(true); return; }
+      if (insErr) {
+        // Carrera: alguien más abrió su turno en el mismo instante y la base
+        // lo bloqueó (índice único, ver migrations/). En vez de mostrar un
+        // error de SQL en crudo, nos comportamos igual que si ya lo hubiéramos
+        // visto abierto — es exactamente lo que pasó, solo que nos enteramos
+        // un paso más tarde.
+        if (insErr.code === "23505") {
+          const { data: nowOpen } = await supabase
+            .from("shifts").select("*").eq("status", "abierto").eq("archivado", false)
+            .order("created_at", { ascending: false }).limit(1);
+          if (cancelled) return;
+          if (nowOpen && nowOpen.length) setOtherOpenBy({ nombre: nowOpen[0].responsable, hora: nowOpen[0].hora_inicio });
+          else setError("No se pudo abrir el turno, probá de nuevo.");
+        } else {
+          setError("No se pudo abrir el turno: " + insErr.message);
+        }
+        setReady(true);
+        return;
+      }
       setShiftId(created.id);
       setMeta({ fecha: created.fecha, horaInicio, horaFin: "", responsable: identity.nombre });
       setBillInicio(carriedBill); setStockInicio(carriedStock);
