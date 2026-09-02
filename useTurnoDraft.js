@@ -83,9 +83,8 @@ export function useTurnoDraft(identity) {
         setReady(true);
         return;
       }
-      // CAMBIO 1: se agregó .not("cerrado_at", "is", null) — así el sistema ignora
-      // cualquier turno que haya quedado marcado "cerrado" pero sin fecha de cierre
-      // real cargada (por ejemplo, turnos de prueba mal cerrados). Sin esto, esos
+      // Se ignora cualquier turno que haya quedado marcado "cerrado" pero sin fecha de
+      // cierre real cargada (por ejemplo, turnos de prueba mal cerrados). Sin esto, esos
       // turnos "fantasma" podían colarse como si fueran el último cierre válido.
       const { data: lastClosed } = await supabase
         .from("shifts").select("*").eq("status", "cerrado").eq("archivado", false)
@@ -173,15 +172,18 @@ export function useTurnoDraft(identity) {
   async function submitTurno() {
     if (!shiftId) return;
 
-    // CAMBIO 2: antes de permitir cerrar el turno, se exige que TODAS las
-    // billeteras que arrancó el turno (billInicio) tengan su valor de cierre
-    // cargado, y que las fichas de cierre de ambas plataformas (B y G) estén
-    // completas. Si falta algo, no se guarda y se le avisa al empleado qué
-    // falta — así ningún turno vuelve a quedar "cerrado" sin caja ni fichas
-    // cargadas (como pasó con el turno de prueba que generó el problema).
-    const billKeys = Object.keys(billInicio);
-    const billCierreCompleto = billKeys.length === 0 || billKeys.every(
-      (k) => billCierre[k] !== undefined && billCierre[k] !== "" && billCierre[k] !== null
+    // Antes de permitir cerrar el turno, se exige completar el cierre de las billeteras
+    // que existen HOY en el sistema (no las que había cuando el turno arrancó). Así, si
+    // en el medio del turno se borró alguna billetera desde Admin, no queda pidiendo
+    // completar algo que ya no aparece en pantalla y que nadie podría cargar nunca.
+    const { data: currentWallets, error: walletsErr } = await supabase.from("wallets").select("nombre");
+    if (walletsErr) {
+      setError("No se pudo verificar las billeteras vigentes: " + walletsErr.message);
+      return false;
+    }
+    const walletNames = (currentWallets || []).map((w) => w.nombre);
+    const billCierreCompleto = walletNames.length === 0 || walletNames.every(
+      (nombre) => billCierre[nombre] !== undefined && billCierre[nombre] !== "" && billCierre[nombre] !== null
     );
     const stockCierreCompleto = stockCierreInf.B !== "" && stockCierreInf.G !== "";
 
