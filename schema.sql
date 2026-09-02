@@ -100,11 +100,16 @@ create table assignments (
 create index assignments_fecha_idx on assignments (fecha);
 
 -- ============================================================
--- Seguridad: como no usamos login por email (es PIN interno),
--- dejamos la API abierta a la clave pública (anon) pero SOLO
--- estas tablas y sin exponer nada del resto del proyecto.
--- Esto es apropiado para una herramienta interna chica; si más
--- adelante querés reforzarlo, se puede migrar a Supabase Auth.
+-- Seguridad: como no usamos login por email (es PIN interno), el acceso de
+-- verdad lo dan las funciones admin_*/session_* de más abajo, todas
+-- `security definer` (corren con permisos elevados, sin depender de estas
+-- políticas). Por eso las tablas que solo se tocan a través de esas
+-- funciones quedan CERRADAS del todo a la clave pública (anon): ni lectura
+-- ni escritura directa — evita, por ejemplo, poder leer los PIN en texto
+-- plano con un simple `select * from employees` desde la consola del
+-- navegador. `shifts` sigue abierta por ahora: la app todavía la lee/escribe
+-- directo (autoguardado, abrir/cerrar turno) sin pasar por una función; está
+-- pendiente de blindar en una segunda etapa que además requiere código nuevo.
 -- ============================================================
 alter table employees enable row level security;
 alter table wallets enable row level security;
@@ -114,13 +119,19 @@ alter table contacts enable row level security;
 alter table contact_events enable row level security;
 alter table assignments enable row level security;
 
-create policy "acceso app" on employees for all using (true) with check (true);
-create policy "acceso app" on wallets for all using (true) with check (true);
+-- Sin política = todo acceso directo denegado (solo entra por las funciones
+-- security definer, que no dependen de RLS).
+-- employees, contacts, contact_events, assignments: sin políticas.
+
+-- wallets y databases: la app SÍ las lee directo desde el cliente (nombres
+-- de billeteras, lista de bases), pero toda escritura ya pasa por funciones
+-- (admin_add_wallet, admin_rename_wallet, admin_create_base, etc.) — se deja
+-- lectura pública nomás.
+create policy "lectura publica" on wallets for select using (true);
+create policy "lectura publica" on databases for select using (true);
+
+-- shifts: sin blindar todavía (ver comentario arriba).
 create policy "acceso app" on shifts for all using (true) with check (true);
-create policy "acceso app" on databases for all using (true) with check (true);
-create policy "acceso app" on contacts for all using (true) with check (true);
-create policy "acceso app" on contact_events for all using (true) with check (true);
-create policy "acceso app" on assignments for all using (true) with check (true);
 
 -- ---------- Datos iniciales ----------
 insert into employees (nombre, pin) values
