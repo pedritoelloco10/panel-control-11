@@ -86,9 +86,14 @@ export function useTurnoDraft(identity) {
       // Se ignora cualquier turno que haya quedado marcado "cerrado" pero sin fecha de
       // cierre real cargada (por ejemplo, turnos de prueba mal cerrados). Sin esto, esos
       // turnos "fantasma" podían colarse como si fueran el último cierre válido.
+      // También se ignora cualquier turno marcado excluir_arrastre=true: es la forma en
+      // que Admin saca un cierre puntual (con billeteras/fichas mal cargadas) de la
+      // cadena de arrastre sin tener que archivar todo el turno y perderlo de las
+      // estadísticas. .not(..., "is", true) trata NULL igual que false (lo incluye).
       const { data: lastClosed } = await supabase
         .from("shifts").select("*").eq("status", "cerrado").eq("archivado", false)
         .not("cerrado_at", "is", null)
+        .not("excluir_arrastre", "is", true)
         .order("cerrado_at", { ascending: false, nullsFirst: false }).limit(1);
       const prev = lastClosed && lastClosed[0];
       const carriedBill = prev ? prev.bill_cierre || {} : {};
