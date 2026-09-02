@@ -484,32 +484,6 @@ export default function AdminDashboard({ adminPin, onExit }) {
         <>
           <DateRangeFilter rangeKey={rangeKey} dateFrom={dateFrom} dateTo={dateTo} onPreset={applyPreset} onFrom={(v) => { setRangeKey("custom"); setDateFrom(v); }} onTo={(v) => { setRangeKey("custom"); setDateTo(v); }} />
 
-          {refuerzos.filter((r) => r.fin).length > 0 && (
-            <Card icon={<Users size={15} />} title="Historial de refuerzos" subtitle="Últimas sesiones ya finalizadas — quedan acá aunque hayan cerrado">
-              <div className="space-y-1.5 max-h-64 overflow-y-auto -mx-1 px-1">
-                {refuerzos.filter((r) => r.fin).map((r) => {
-                  const inicio = new Date(r.inicio);
-                  const fin = new Date(r.fin);
-                  const minutos = Math.max(0, Math.round((fin - inicio) / 60000));
-                  const horas = Math.floor(minutos / 60);
-                  const mins = minutos % 60;
-                  const duracion = horas > 0 ? `${horas}h ${mins}m` : `${mins}m`;
-                  return (
-                    <div key={r.id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-1.5">
-                      <div>
-                        <p className="text-xs font-bold">{r.empleado}</p>
-                        <p className="text-[10px] text-slate-500">
-                          {inicio.toLocaleDateString("es-AR")} · {inicio.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} → {fin.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-400">{duracion}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          )}
-
           <h3 className="font-bold text-sm mb-2 mt-4 text-slate-400">Análisis de totales ({computed.length} turnos)</h3>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <StatBox label="Ventas totales" value={money(totals.ventas)} positive />
@@ -633,7 +607,61 @@ export default function AdminDashboard({ adminPin, onExit }) {
         </>
       )}
 
-      {tab === "bases" && <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} adminPin={adminPin} onChange={loadAll} />}
+      {tab === "bases" && (
+        <>
+          {refuerzos.filter((r) => r.fin).length > 0 && (
+            <Card icon={<Users size={15} />} title="Historial de refuerzos" subtitle="Últimas sesiones ya finalizadas, con lo que cada una logró">
+              <div className="space-y-2 max-h-72 overflow-y-auto -mx-1 px-1">
+                {refuerzos.filter((r) => r.fin).map((r) => {
+                  const inicio = new Date(r.inicio);
+                  const fin = new Date(r.fin);
+                  const minutos = Math.max(0, Math.round((fin - inicio) / 60000));
+                  const horas = Math.floor(minutos / 60);
+                  const mins = minutos % 60;
+                  const duracion = horas > 0 ? `${horas}h ${mins}m` : `${mins}m`;
+                  const fechaSesion = inicio.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+                  const st = workedContacts
+                    .filter((w) => w.trabajada_por === r.empleado && w.fecha === fechaSesion)
+                    .reduce((acc, w) => {
+                      if (w.enviado) acc.contactados++;
+                      if (w.contestado) acc.contestados++;
+                      if (w.cargo) acc.cargaron++;
+                      return acc;
+                    }, { contactados: 0, contestados: 0, cargaron: 0 });
+                  return (
+                    <div key={r.id} className="bg-white/5 rounded-lg px-3 py-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div>
+                          <p className="text-xs font-bold">{r.empleado}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {inicio.toLocaleDateString("es-AR")} · {inicio.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} → {fin.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400">{duracion}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <div className="bg-black/20 rounded-lg py-1.5 text-center">
+                          <p className="text-sm font-black">{st.contactados}</p>
+                          <p className="text-[9px] text-slate-500 uppercase">Contactó</p>
+                        </div>
+                        <div className="bg-black/20 rounded-lg py-1.5 text-center">
+                          <p className="text-sm font-black">{st.contestados}</p>
+                          <p className="text-[9px] text-slate-500 uppercase">Contestó</p>
+                        </div>
+                        <div className="bg-black/20 rounded-lg py-1.5 text-center">
+                          <p className="text-sm font-black text-emerald-400">{st.cargaron}</p>
+                          <p className="text-[9px] text-slate-500 uppercase">Cargó</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+          <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} adminPin={adminPin} onChange={loadAll} />
+        </>
+      )}
       {tab === "clientes" && <ClientesRanking computedAll={computedAll} />}
       {tab === "empleados" && <EmployeeManager employees={employees} adminPin={adminPin} onChange={loadAll} />}
       {tab === "billeteras" && <WalletManager wallets={wallets} adminPin={adminPin} onChange={loadAll} />}
