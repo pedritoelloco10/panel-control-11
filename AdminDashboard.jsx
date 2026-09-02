@@ -484,6 +484,32 @@ export default function AdminDashboard({ adminPin, onExit }) {
         <>
           <DateRangeFilter rangeKey={rangeKey} dateFrom={dateFrom} dateTo={dateTo} onPreset={applyPreset} onFrom={(v) => { setRangeKey("custom"); setDateFrom(v); }} onTo={(v) => { setRangeKey("custom"); setDateTo(v); }} />
 
+          {refuerzos.filter((r) => r.fin).length > 0 && (
+            <Card icon={<Users size={15} />} title="Historial de refuerzos" subtitle="Últimas sesiones ya finalizadas — quedan acá aunque hayan cerrado">
+              <div className="space-y-1.5 max-h-64 overflow-y-auto -mx-1 px-1">
+                {refuerzos.filter((r) => r.fin).map((r) => {
+                  const inicio = new Date(r.inicio);
+                  const fin = new Date(r.fin);
+                  const minutos = Math.max(0, Math.round((fin - inicio) / 60000));
+                  const horas = Math.floor(minutos / 60);
+                  const mins = minutos % 60;
+                  const duracion = horas > 0 ? `${horas}h ${mins}m` : `${mins}m`;
+                  return (
+                    <div key={r.id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-1.5">
+                      <div>
+                        <p className="text-xs font-bold">{r.empleado}</p>
+                        <p className="text-[10px] text-slate-500">
+                          {inicio.toLocaleDateString("es-AR")} · {inicio.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} → {fin.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400">{duracion}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
           <h3 className="font-bold text-sm mb-2 mt-4 text-slate-400">Análisis de totales ({computed.length} turnos)</h3>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <StatBox label="Ventas totales" value={money(totals.ventas)} positive />
