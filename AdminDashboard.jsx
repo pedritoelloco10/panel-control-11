@@ -110,7 +110,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
     setArchivados(data || []);
   }
   async function restaurarTurno(id) {
-    await supabase.from("shifts").update({ archivado: false }).eq("id", id);
+    await supabase.rpc("admin_toggle_archivado", { input_admin_pin: adminPin, target_id: id, nuevo_archivado: false });
     await loadArchivados(); loadAll();
   }
 
@@ -503,7 +503,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
                   <button
                     onClick={async () => {
                       if (!window.confirm(`¿Archivar el turno abierto de ${s.responsable}? Es para pruebas viejas o turnos trabados. Queda guardado, no se pierde, pero se libera la caja para abrir uno nuevo.`)) return;
-                      await supabase.from("shifts").update({ archivado: true, updated_at: new Date().toISOString() }).eq("id", s.id); loadAll();
+                      await supabase.rpc("admin_toggle_archivado", { input_admin_pin: adminPin, target_id: s.id, nuevo_archivado: true }); loadAll();
                     }}
                     className="text-rose-400 text-[10px] font-bold flex items-center gap-1"
                   >
@@ -665,7 +665,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <ShiftRow
               key={c.shift.id} c={c} expanded={expanded === c.shift.id}
               onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
-              onDelete={async (id) => { await supabase.from("shifts").update({ archivado: true, updated_at: new Date().toISOString() }).eq("id", id); setExpanded(null); loadAll(); }}
+              onDelete={async (id) => { await supabase.rpc("admin_toggle_archivado", { input_admin_pin: adminPin, target_id: id, nuevo_archivado: true }); setExpanded(null); loadAll(); }}
               onOpenOps={setOpsModal}
               adminPin={adminPin} onChange={loadAll}
             />
@@ -1018,7 +1018,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
           <div className="flex items-center gap-3 mt-1">
             <button
               onClick={async () => {
-                await supabase.from("shifts").update({ excluir_arrastre: !s.excluir_arrastre, updated_at: new Date().toISOString() }).eq("id", s.id);
+                await supabase.rpc("admin_toggle_excluir_arrastre", { input_admin_pin: adminPin, target_id: s.id, nuevo_excluir: !s.excluir_arrastre });
                 onChange();
               }}
               className="text-amber-400 text-[11px] font-bold flex items-center gap-1"
@@ -1191,7 +1191,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
   }, []);
 
   async function saveCupo() {
-    await supabase.from("app_config").update({ value: String(parseInt(cupo, 10) || 35) }).eq("key", "cupo_diario_leads");
+    await supabase.rpc("admin_set_config", { input_admin_pin: adminPin, config_key: "cupo_diario_leads", config_value: String(parseInt(cupo, 10) || 35) });
     setCupoSaved(true); setTimeout(() => setCupoSaved(false), 1500);
   }
 

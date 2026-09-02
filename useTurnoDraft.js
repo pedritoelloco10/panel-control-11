@@ -107,15 +107,18 @@ export function useTurnoDraft(identity) {
       else setCarriedFrom(null);
 
       const horaInicio = nowStr();
-      const { data: created, error: insErr } = await supabase
-        .from("shifts")
-        .insert({
-          fecha: todayStr(), hora_inicio: horaInicio, responsable: identity.nombre,
-          turno_label: classifyTurno(horaInicio),
-          bill_inicio: carriedBill, stock_inicio: carriedStock,
-          status: "abierto",
-        })
-        .select().single();
+      // Pasa por session_open_turno (security definer) en vez de insertar
+      // directo: la función valida el token del lado del servidor y arma la
+      // fila con el `responsable` que le corresponde a ESE token — nadie
+      // puede abrir un turno a nombre de otra persona falseando el pedido.
+      const { data: created, error: insErr } = await supabase.rpc("session_open_turno", {
+        input_token: identity.token,
+        nueva_fecha: todayStr(),
+        nueva_hora_inicio: horaInicio,
+        nuevo_turno_label: classifyTurno(horaInicio),
+        nuevo_bill_inicio: carriedBill,
+        nuevo_stock_inicio: carriedStock,
+      });
       if (cancelled) return;
       if (insErr) {
         // Carrera: alguien más abrió su turno en el mismo instante y la base
@@ -191,13 +194,17 @@ export function useTurnoDraft(identity) {
     let cancelled = false;
     const push = async () => {
       const d = draftRef.current;
-      const { error: saveErr } = await supabase.from("shifts").update({
-        bill_inicio: d.billInicio, bill_cierre: d.billCierre,
-        stock_inicio: d.stockInicio, stock_cierre: d.stockCierreInf,
-        ops: d.opsFilled, bajadas: d.bajadas, movs: d.movs, notas: d.notas,
-        updated_at: new Date().toISOString(),
-      }).eq("id", shiftId);
-      if (!cancelled) setAutosaveError(!!saveErr);
+      const { data: ok, error: saveErr } = await supabase.rpc("session_autosave_turno", {
+        input_token: identity.token,
+        target_id: shiftId,
+        nuevo_bill_inicio: d.billInicio, nuevo_bill_cierre: d.billCierre,
+        nuevo_stock_inicio: d.stockInicio, nuevo_stock_cierre: d.stockCierreInf,
+        nuevos_ops: d.opsFilled, nuevas_bajadas: d.bajadas, nuevos_movs: d.movs, nuevas_notas: d.notas,
+      });
+      // `ok === false` significa que la función corrió bien pero no encontró
+      // el turno como propio y abierto (sesión vencida, u otra cosa lo cerró
+      // mientras tanto) — se trata igual que un error de guardado.
+      if (!cancelled) setAutosaveError(!!saveErr || ok === false);
     };
     const interval = setInterval(push, 6000);
     const onVisibility = () => { if (document.hidden) push(); };
@@ -209,7 +216,7 @@ export function useTurnoDraft(identity) {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", push);
     };
-  }, [shiftId, ready]);
+  }, [shiftId, ready, identity]);
 
   async function submitTurno() {
     if (!shiftId) return;
@@ -240,18 +247,20 @@ export function useTurnoDraft(identity) {
 
     setSaving(true);
     setError("");
-    const { error: updErr } = await supabase.from("shifts").update({
-      status: "cerrado",
-      hora_fin: nowStr(),
-      turno_label: classifyTurno(meta.horaInicio),
-      bill_inicio: billInicio, bill_cierre: billCierre,
-      stock_inicio: stockInicio, stock_cierre: stockCierreInf,
-      ops: opsFilled, bajadas, movs, notas,
-      updated_at: new Date().toISOString(),
-      cerrado_at: new Date().toISOString(),
-    }).eq("id", shiftId);
+    const { data: ok, error: updErr } = await supabase.rpc("session_close_turno", {
+      input_token: identity.token,
+      target_id: shiftId,
+      nueva_hora_fin: nowStr(),
+      nuevo_turno_label: classifyTurno(meta.horaInicio),
+      nuevo_bill_inicio: billInicio, nuevo_bill_cierre: billCierre,
+      nuevo_stock_inicio: stockInicio, nuevo_stock_cierre: stockCierreInf,
+      nuevos_ops: opsFilled, nuevas_bajadas: bajadas, nuevos_movs: movs, nuevas_notas: notas,
+    });
     setSaving(false);
-    if (updErr) { setError("No se pudo cerrar el turno: " + updErr.message); return false; }
+    if (updErr || ok === false) {
+      setError("No se pudo cerrar el turno" + (updErr ? ": " + updErr.message : " — probá de nuevo."));
+      return false;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
     setShiftId(null);
