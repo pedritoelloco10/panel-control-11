@@ -2,7 +2,6 @@ export const PLATFORMS = [
   { key: "B", label: "BET" },
   { key: "G", label: "GANA" },
 ];
-export const DB_TYPES = { general: "General", reactivacion: "Reactivación 7+ días", comprada: "Base comprada" };
 export const FUENTE_TYPES = [
   { key: "masiva", label: "Masiva", hint: "Interactuaron con publicidad" },
   { key: "principales", label: "Principales", hint: "Ya jugaron, sin hablar 7+ días" },

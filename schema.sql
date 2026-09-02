@@ -68,8 +68,12 @@ create unique index shifts_un_solo_abierto on shifts (status) where status = 'ab
 create table databases (
   id uuid primary key default gen_random_uuid(),
   nombre text not null,
-  tipo text not null default 'comprada', -- general | reactivacion | comprada
-  quota_empleado int, -- si no es null, el empleado puede agregar hasta esta cantidad de contactos
+  -- `tipo` quedó vestigial: admin_create_base siempre inserta 'comprada' acá
+  -- sin importar la fuente real — no lo uses para mostrar nada, la fuente
+  -- real de cada base está en `tipo_fuente` (ver FUENTE_TYPES en lib.js).
+  tipo text not null default 'comprada',
+  tipo_fuente text not null default 'masiva', -- masiva | principales | comprada, ver FUENTE_TYPES
+  quota_empleado int, -- sin uso — resabio de un reparto manual anterior al automático (session_get_leads)
   created_at timestamptz not null default now()
 );
 
@@ -85,13 +89,14 @@ create table contacts (
   trabajada_por text,
   fecha_trabajo date,
   -- Estado del lead (nuevo/contactado/contestado/interesado/cargado/descartado,
-  -- ver LEAD_STATES en lib.js) y su asignación diaria por el reparto automático.
-  -- Nulo se trata como "nuevo" en el código (c.estado || "nuevo").
-  estado text,
+  -- ver LEAD_STATES en lib.js) y su asignación diaria por el reparto automático
+  -- (session_get_leads, security definer — ver comentario más abajo).
+  estado text not null default 'nuevo',
   motivo_descarte text,
   ultimo_contacto date,
   asignado_a text, -- nombre de empleado, igual que trabajada_por/agregado_por
   fecha_asignacion date,
+  estado_actualizado_at timestamptz, -- cuándo cambió `estado` por última vez (para la cola de urgentes y el reciclado)
   created_at timestamptz not null default now()
 );
 create index contacts_base_idx on contacts (base_id);
@@ -109,6 +114,9 @@ create table contact_events (
 create index contact_events_base_idx on contact_events (base_id);
 
 -- ---------- Asignación de bases a empleados por día ----------
+-- Sin uso — resabio del reparto manual anterior al automático (session_get_leads
+-- ya lo reemplazó del todo). Se deja documentada por si alguien la encuentra en
+-- Supabase y no sabe si puede borrarla; no la toca ningún código de la app.
 create table assignments (
   id uuid primary key default gen_random_uuid(),
   empleado_id uuid references employees(id),
@@ -122,11 +130,19 @@ create table assignments (
 create index assignments_fecha_idx on assignments (fecha);
 
 -- ---------- Configuración general (clave/valor) ----------
+-- Todas leídas por session_get_leads/session_my_status (security definer) al
+-- repartir leads. Los valores por defecto de acá son los que usan esas
+-- funciones si la fila no existe — se documentan con el valor real vigente.
 create table app_config (
   key text primary key,
   value text
 );
-insert into app_config (key, value) values ('cupo_diario_leads', '35');
+insert into app_config (key, value) values
+  ('cupo_diario_leads', '35'),        -- leads activos simultáneos por empleado (no es un tope total del día: se liberan lugares a medida que resuelve)
+  ('cupo_refuerzo_leads', '20'),      -- ídem, pero para alguien trabajando como refuerzo
+  ('porcentaje_relleno', '15'),       -- % del cupo que se llena primero con leads de fuente "masiva"
+  ('dias_reciclar_contactado', '3'),  -- días sin avance en estado "contactado" antes de volver al pool
+  ('horas_reciclar_contestado', '24'); -- horas sin avance en "contestado"/"interesado" antes de volver al pool
 
 -- ---------- Identificadores de cliente ya vistos (autocompletar en Operaciones) ----------
 create table clientes (
