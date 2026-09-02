@@ -33,6 +33,10 @@ export default function BasesView({ identity, onLogout }) {
   const [newPhone, setNewPhone] = useState("");
   const [discardingId, setDiscardingId] = useState(null);
   const [errMsg, setErrMsg] = useState("");
+  // Aviso puntual (no bloqueante) cuando un contacto ya no está asignado a vos —
+  // por ejemplo, porque el sistema lo reasignó a otra persona mientras lo tenías
+  // abierto. Antes esto pasaba en silencio y el empleado creía que había guardado.
+  const [warnMsg, setWarnMsg] = useState("");
 
   useEffect(() => { load(); }, [identity]);
 
@@ -60,8 +64,17 @@ export default function BasesView({ identity, onLogout }) {
   }
 
   async function setEstado(c, estado, motivo) {
-    const { error } = await supabase.rpc("session_set_estado", { input_token: identity.token, target_id: c.id, nuevo_estado: estado, motivo: motivo || null });
-    if (!error) {
+    setWarnMsg("");
+    const { data: guardado, error } = await supabase.rpc("session_set_estado", { input_token: identity.token, target_id: c.id, nuevo_estado: estado, motivo: motivo || null });
+    if (error) {
+      setWarnMsg("No se pudo guardar por un error de conexión. Probá de nuevo.");
+    } else if (guardado === false) {
+      // La función respondió sin error, pero avisó que NO tocó nada: este contacto
+      // ya no está asignado a vos (probablemente se reasignó). Antes esto se
+      // ignoraba y quedaba como "guardado" en tu pantalla sin serlo de verdad.
+      setWarnMsg(`"${c.nombre}" ya no está asignado a vos — puede que se haya reasignado. Se actualizó tu lista.`);
+      load();
+    } else {
       const patch = { estado, motivo_descarte: estado === "descartado" ? motivo : null };
       setContacts(contacts.map((x) => (x.id === c.id ? { ...x, ...patch } : x)));
     }
@@ -69,8 +82,16 @@ export default function BasesView({ identity, onLogout }) {
   }
 
   async function setEstadoUrgente(c, estado, motivo) {
-    const { error } = await supabase.rpc("session_claim_urgent", { input_token: identity.token, target_id: c.id, nuevo_estado: estado, motivo: motivo || null });
-    if (!error) setUrgentes(urgentes.filter((x) => x.id !== c.id));
+    setWarnMsg("");
+    const { data: guardado, error } = await supabase.rpc("session_claim_urgent", { input_token: identity.token, target_id: c.id, nuevo_estado: estado, motivo: motivo || null });
+    if (error) {
+      setWarnMsg("No se pudo guardar por un error de conexión. Probá de nuevo.");
+    } else if (guardado === false) {
+      setWarnMsg(`"${c.nombre}" ya lo tomó otra persona de la cola de urgentes. Se actualizó tu lista.`);
+      load();
+    } else {
+      setUrgentes(urgentes.filter((x) => x.id !== c.id));
+    }
     setDiscardingId(null);
   }
 
@@ -102,6 +123,12 @@ export default function BasesView({ identity, onLogout }) {
         <Database size={16} className="text-indigo-300" />
         <h2 className="font-bold text-lg">Bases de datos</h2>
       </div>
+
+      {warnMsg && (
+        <div className="bg-amber-500/10 ring-1 ring-amber-500/30 rounded-xl px-3.5 py-2.5 mb-3">
+          <p className="text-amber-300 text-xs">{warnMsg}</p>
+        </div>
+      )}
 
       {errMsg && (
         <Card icon={<Sparkles size={15} />} title="Sesión vencida" subtitle="Por seguridad, las sesiones vencen solas cada 14 horas">
