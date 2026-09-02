@@ -1,5 +1,5 @@
 import React from "react";
-import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock } from "lucide-react";
+import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock, WifiOff } from "lucide-react";
 import { Card, Field, Badge } from "./ui";
 import { PLATFORMS, num, money, classifyTurno, uid } from "./lib";
 
@@ -7,7 +7,7 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
   const { meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
-    expected, cierreCheck, saving, error, saved, submitTurno, opsFilledCount, carriedFrom, otherOpenBy, refuerzoPropioAbierto } = draft;
+    expected, cierreCheck, saving, error, saved, autosaveError, submitTurno, opsFilledCount, carriedFrom, otherOpenBy, refuerzoPropioAbierto } = draft;
 
   if (refuerzoPropioAbierto) {
     return (
@@ -44,6 +44,15 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
       {saved && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-30 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
           <CheckCircle2 size={16} /> Turno guardado
+        </div>
+      )}
+
+      {autosaveError && (
+        <div className="bg-rose-500/15 ring-1 ring-rose-500/40 rounded-xl px-3.5 py-2.5 mb-3 flex items-center gap-2">
+          <WifiOff size={15} className="text-rose-400 flex-none" />
+          <p className="text-xs text-rose-300 font-bold">
+            No se pudo guardar el último cambio — revisá tu conexión. Sigue reintentando solo, no cierres la pestaña hasta que este aviso desaparezca.
+          </p>
         </div>
       )}
 
