@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Card, StatBox, MiniStat } from "./ui";
 import { supabase } from "./supabaseClient";
-import { PLATFORMS, DB_TYPES, FUENTE_TYPES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno } from "./lib";
+import { PLATFORMS, FUENTE_TYPES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno } from "./lib";
 
 const CSV_HEADERS = [
   { key: "nombre", label: "Nombre" },
@@ -1353,7 +1353,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
                   </button>
                 </div>
               </div>
-              <p className="text-[10px] text-slate-500 mb-1.5">{DB_TYPES[d.tipo]}</p>
+              <p className="text-[10px] text-slate-500 mb-1.5">{FUENTE_TYPES.find((f) => f.key === d.tipo_fuente)?.label || d.tipo_fuente}</p>
               <div className="grid grid-cols-4 gap-2 text-center">
                 <MiniStat label="Contactos" value={s.total} />
                 <MiniStat label="Enviados" value={s.enviados} />
