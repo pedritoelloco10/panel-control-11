@@ -73,6 +73,9 @@ create table databases (
   -- real de cada base está en `tipo_fuente` (ver FUENTE_TYPES en lib.js).
   tipo text not null default 'comprada',
   tipo_fuente text not null default 'masiva', -- masiva | principales | comprada, ver FUENTE_TYPES
+  -- Si está en true, session_get_leads reparte los leads de esta base antes
+  -- que los de las demás de su misma franja de calidad (ver migrations/).
+  prioridad boolean not null default false,
   quota_empleado int, -- sin uso — resabio de un reparto manual anterior al automático (session_get_leads)
   created_at timestamptz not null default now()
 );
