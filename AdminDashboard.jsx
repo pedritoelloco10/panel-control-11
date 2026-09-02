@@ -248,6 +248,32 @@ export default function AdminDashboard({ adminPin, onExit }) {
     return Object.entries(map).sort((a, b) => b[1].neto - a[1].neto);
   }, [computed]);
 
+  // Igual que "byEmployee": junta lo que pasó en los turnos (operaciones N/L/R) con lo
+  // que pasó en bases (enviados/contestados/cargaron), pero agrupado por fecha en vez
+  // de por empleado. Respeta el mismo rango de fechas elegido arriba en "Análisis".
+  const byDate = useMemo(() => {
+    const map = {};
+    const ensure = (fecha) => {
+      if (!map[fecha]) map[fecha] = { fecha, enviados: 0, contestados: 0, cargaron: 0, opsNuevo: 0, opsLista: 0, opsDerivado: 0 };
+      return map[fecha];
+    };
+    computed.forEach((c) => {
+      const e = ensure(c.shift.fecha);
+      e.opsNuevo += c.nuevos;
+      e.opsDerivado += c.derivados;
+      e.opsLista += c.cargasLista;
+    });
+    workedContacts.forEach((w) => {
+      if (dateFrom && w.fecha < dateFrom) return;
+      if (dateTo && w.fecha > dateTo) return;
+      const e = ensure(w.fecha);
+      if (w.enviado) e.enviados++;
+      if (w.contestado) e.contestados++;
+      if (w.cargo) e.cargaron++;
+    });
+    return Object.values(map).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  }, [computed, workedContacts, dateFrom, dateTo]);
+
   const ahoraMismo = useMemo(() => {
     const live = liveShifts[0];
     if (live) {
@@ -532,6 +558,42 @@ export default function AdminDashboard({ adminPin, onExit }) {
               </div>
             ))}
           </Card>
+          <Card icon={<TrendingUp size={15} />} title="Por día" subtitle="Mensajes, respuestas y cargas, día a día — en el período elegido arriba">
+            {byDate.length === 0 ? (
+              <p className="text-slate-600 text-xs italic">Sin actividad en este período.</p>
+            ) : (
+              <div className="overflow-x-auto -mx-1 px-1">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-900">
+                    <tr className="text-slate-500 text-left">
+                      <th className="py-2 px-2 font-semibold">Fecha</th>
+                      <th className="py-2 px-2 font-semibold text-right">Enviados</th>
+                      <th className="py-2 px-2 font-semibold text-right">Contestaron</th>
+                      <th className="py-2 px-2 font-semibold text-right">Cargaron</th>
+                      <th className="py-2 px-2 font-semibold text-right">N</th>
+                      <th className="py-2 px-2 font-semibold text-right">L</th>
+                      <th className="py-2 px-2 font-semibold text-right">R</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byDate.map((d) => (
+                      <tr key={d.fecha} className="border-t border-white/5">
+                        <td className="py-2 px-2 font-bold">{d.fecha}</td>
+                        <td className="py-2 px-2 text-right">{d.enviados}</td>
+                        <td className="py-2 px-2 text-right">{d.contestados}</td>
+                        <td className="py-2 px-2 text-right text-emerald-400 font-bold">{d.cargaron}</td>
+                        <td className="py-2 px-2 text-right text-slate-400">{d.opsNuevo}</td>
+                        <td className="py-2 px-2 text-right text-slate-400">{d.opsLista}</td>
+                        <td className="py-2 px-2 text-right text-slate-400">{d.opsDerivado}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-[9px] text-slate-600 mt-2">N = cliente nuevo/publicidad · L = de lista · R = derivado/referido. Estas 3 columnas cuentan operaciones de carga, no contactos de bases.</p>
+              </div>
+            )}
+          </Card>
+
           <Card icon={<Users size={15} />} title="Estadísticas por empleado" subtitle="En el período seleccionado arriba">
             {byEmployee.length === 0 && <p className="text-slate-600 text-xs italic">Sin turnos ni actividad en este período.</p>}
             {byEmployee.map(([nombre, e]) => (
