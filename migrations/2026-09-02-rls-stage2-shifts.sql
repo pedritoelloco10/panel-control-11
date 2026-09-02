@@ -185,11 +185,27 @@ $function$;
 -- ============================================================
 -- Recién después de probar las 6 funciones de arriba y de haber actualizado
 -- el código de la app para que las use (ver el PR correspondiente), correr
--- estas dos líneas para cerrar la escritura directa:
+-- lo que corresponda para cerrar la escritura directa.
 --
--- drop policy "acceso app" on shifts;
--- create policy "lectura publica" on shifts for select using (true);
+-- OJO: en este proyecto las políticas de shifts/app_config NO se llamaban
+-- "acceso app" (esa era una suposición del schema.sql original) — la base
+-- real tenía una política por operación: "shifts select"/"shifts
+-- insert"/"shifts update" y lo mismo para app_config. Antes de correr un
+-- DROP, conviene confirmar los nombres reales:
 --
--- drop policy "acceso app" on app_config;
--- create policy "lectura publica" on app_config for select using (true);
+--   select policyname, cmd from pg_policies where tablename in ('shifts', 'app_config');
+--
+-- Lo que terminamos corriendo en este proyecto (ya aplicado, 2026-09-02):
+--
+-- drop policy "shifts insert" on shifts;
+-- drop policy "shifts update" on shifts;
+-- (la política "shifts select" se dejó como estaba — ya era lectura
+-- pública, no hacía falta reemplazarla)
+--
+-- drop policy "app_config insert" on app_config;
+-- drop policy "app_config update" on app_config;
+-- (mismo caso: "app_config select" se dejó como estaba)
+--
+-- No había política de DELETE en ninguna de las dos tablas, así que borrar
+-- filas por API pública ya estaba bloqueado de antes.
 -- ============================================================

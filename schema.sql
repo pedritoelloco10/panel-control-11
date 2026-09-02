@@ -142,9 +142,7 @@ create table clientes (
 -- funciones quedan CERRADAS del todo a la clave pública (anon): ni lectura
 -- ni escritura directa — evita, por ejemplo, poder leer los PIN en texto
 -- plano con un simple `select * from employees` desde la consola del
--- navegador. `shifts` sigue abierta por ahora: la app todavía la lee/escribe
--- directo (autoguardado, abrir/cerrar turno) sin pasar por una función; está
--- pendiente de blindar en una segunda etapa que además requiere código nuevo.
+-- navegador.
 -- ============================================================
 alter table employees enable row level security;
 alter table wallets enable row level security;
@@ -167,13 +165,12 @@ alter table clientes enable row level security;
 create policy "lectura publica" on wallets for select using (true);
 create policy "lectura publica" on databases for select using (true);
 
--- shifts: sin blindar todavía (ver comentario arriba).
-create policy "acceso app" on shifts for all using (true) with check (true);
-
--- app_config: la app escribe el cupo diario de leads directo desde el cliente,
--- sin pasar por ninguna función admin_* todavía — falta blindar esto también
--- (crear un admin_set_config y cerrar esta política), pendiente de etapa 2.
-create policy "acceso app" on app_config for all using (true) with check (true);
+-- shifts y app_config: mismo trato que wallets/databases — lectura pública,
+-- escritura solo a través de funciones (session_open_turno,
+-- session_autosave_turno, session_close_turno, admin_toggle_archivado,
+-- admin_toggle_excluir_arrastre, admin_set_config).
+create policy "lectura publica" on shifts for select using (true);
+create policy "lectura publica" on app_config for select using (true);
 
 -- clientes: identificadores para autocompletar en Operaciones, sin datos
 -- sensibles — se deja abierta, cualquier empleado logueado la usa directo.
