@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   Sparkles, BarChart3, TrendingUp, Database, Users, Wallet, Lock,
   ArrowLeft, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle,
-  Pencil, X, Plus, Upload, Coins,
+  Pencil, X, Plus, Upload, Coins, Star,
 } from "lucide-react";
 import { Card, StatBox, MiniStat } from "./ui";
 import { supabase } from "./supabaseClient";
@@ -134,7 +134,17 @@ export default function AdminDashboard({ adminPin, onExit }) {
     for (const d of (dbList || [])) {
       const cs = (allContacts || []).filter((c) => c.base_id === d.id);
       const agregadosPorEmpleado = cs.filter((c) => c.agregado_por && c.agregado_por !== "admin");
-      stats[d.id] = { total: cs.length, enviados: cs.filter((c) => c.enviado).length, contestados: cs.filter((c) => c.contestado).length, cargaron: cs.filter((c) => c.cargo).length, agregadosPorEmpleado };
+      stats[d.id] = {
+        total: cs.length,
+        enviados: cs.filter((c) => c.enviado).length,
+        contestados: cs.filter((c) => c.contestado).length,
+        cargaron: cs.filter((c) => c.cargo).length,
+        pendientes: cs.filter((c) => ["nuevo", "contactado"].includes(c.estado || "nuevo")).length,
+        // Actividad reciente (últimos 3 días) — para ver de un vistazo si una
+        // base está caliente ahora mismo, sin tener que mirar el historial.
+        trabajados3d: cs.filter((c) => c.fecha_trabajo && daysSince(c.fecha_trabajo) < 3).length,
+        agregadosPorEmpleado,
+      };
       cs.forEach((c) => {
         flat.push({ ...c, base_nombre: d.nombre });
         if (["nuevo", "contactado"].includes(c.estado || "nuevo") && (!c.asignado_a || c.fecha_asignacion < todayStr())) poolDisponible++;
@@ -1331,16 +1341,38 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         </div>
       </Card>
 
-      <Card icon={<Database size={15} />} title="Resultados por base de datos">
+      <Card
+        icon={<Database size={15} />} title="Resultados por base de datos"
+        subtitle="Tocá la estrella para priorizar una base en el reparto de leads"
+      >
         {dbs.length === 0 && <p className="text-slate-600 text-xs italic">No hay bases creadas todavía.</p>}
-        {dbs.map((d) => {
-          const s = dbStats[d.id] || { total: 0, enviados: 0, contestados: 0, cargaron: 0, agregadosPorEmpleado: [] };
+        {[...dbs].sort((a, b) => (b.prioridad ? 1 : 0) - (a.prioridad ? 1 : 0)).map((d) => {
+          const s = dbStats[d.id] || { total: 0, enviados: 0, contestados: 0, cargaron: 0, pendientes: 0, trabajados3d: 0, agregadosPorEmpleado: [] };
+          const avance = s.total ? Math.round((s.enviados / s.total) * 100) : 0;
           return (
-            <div key={d.id} className="py-2.5 border-b border-white/5 last:border-0">
-              <div className="flex items-center justify-between">
-                <p className="font-bold text-sm">{d.nombre}</p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => viewEvents(d.id, d.nombre)} className="text-[10px] text-indigo-300 font-bold">Ver historial</button>
+            <div
+              key={d.id}
+              className={`rounded-xl px-3 py-2.5 mb-2 last:mb-0 ${d.prioridad ? "bg-amber-500/10 ring-1 ring-amber-500/30" : "bg-white/[0.02] ring-1 ring-white/5"}`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <button
+                    onClick={async () => {
+                      await supabase.rpc("admin_toggle_base_prioridad", { input_admin_pin: adminPin, target_id: d.id, nueva_prioridad: !d.prioridad });
+                      onChange();
+                    }}
+                    title={d.prioridad ? "Quitar prioridad" : "Priorizar esta base en el reparto"}
+                    className={`flex-none ${d.prioridad ? "text-amber-400" : "text-slate-600 hover:text-amber-400"}`}
+                  >
+                    <Star size={14} fill={d.prioridad ? "currentColor" : "none"} />
+                  </button>
+                  <p className="font-bold text-sm truncate">{d.nombre}</p>
+                  <span className="text-[9px] text-slate-500 bg-white/5 rounded-full px-2 py-0.5 flex-none">
+                    {FUENTE_TYPES.find((f) => f.key === d.tipo_fuente)?.label || d.tipo_fuente}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5 flex-none">
+                  <button onClick={() => viewEvents(d.id, d.nombre)} className="text-[10px] text-indigo-300 font-bold">Historial</button>
                   <button
                     onClick={async () => {
                       if (!window.confirm(`¿Borrar la base "${d.nombre}"? Se van a borrar también sus ${s.total} contactos. No se puede deshacer.`)) return;
@@ -1353,13 +1385,19 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
                   </button>
                 </div>
               </div>
-              <p className="text-[10px] text-slate-500 mb-1.5">{FUENTE_TYPES.find((f) => f.key === d.tipo_fuente)?.label || d.tipo_fuente}</p>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <MiniStat label="Contactos" value={s.total} />
-                <MiniStat label="Enviados" value={s.enviados} />
+
+              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
+                <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${avance}%` }} />
+              </div>
+
+              <div className="grid grid-cols-5 gap-1.5 text-center">
+                <MiniStat label="Total" value={s.total} />
+                <MiniStat label="Pendientes" value={s.pendientes} />
                 <MiniStat label="Contestados" value={s.contestados} pct={s.enviados ? Math.round((s.contestados / s.enviados) * 100) : 0} />
                 <MiniStat label="Cargaron" value={s.cargaron} pct={s.contestados ? Math.round((s.cargaron / s.contestados) * 100) : 0} />
+                <MiniStat label="Últ. 3 días" value={s.trabajados3d} />
               </div>
+
               {s.agregadosPorEmpleado.length > 0 && (
                 <div className="mt-2 bg-amber-500/10 ring-1 ring-amber-500/20 rounded-lg px-2.5 py-2">
                   <p className="text-[10px] font-bold text-amber-400 mb-1">{s.agregadosPorEmpleado.length} agregado(s) por empleados — para revisar</p>
