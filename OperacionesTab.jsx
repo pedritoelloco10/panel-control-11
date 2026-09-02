@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { X, Lock } from "lucide-react";
+import { X, Lock, WifiOff } from "lucide-react";
 import { Card } from "./ui";
 import { PLATFORMS, num, money, formatMiles, blankOp, seedOps, GROW_BATCH } from "./lib";
 import { supabase } from "./supabaseClient";
 
 export default function OperacionesTab({ draft }) {
-  const { ops, setOps, expected, otherOpenBy } = draft;
+  const { ops, setOps, expected, otherOpenBy, autosaveError } = draft;
   const [clientesConocidos, setClientesConocidos] = useState([]);
 
   useEffect(() => {
@@ -51,6 +51,14 @@ export default function OperacionesTab({ draft }) {
 
   return (
     <div className="pt-5">
+      {autosaveError && (
+        <div className="bg-rose-500/15 ring-1 ring-rose-500/40 rounded-xl px-3.5 py-2.5 mb-3 flex items-center gap-2">
+          <WifiOff size={15} className="text-rose-400 flex-none" />
+          <p className="text-xs text-rose-300 font-bold">
+            No se pudo guardar el último cambio — revisá tu conexión. Sigue reintentando solo, no cierres la pestaña hasta que este aviso desaparezca.
+          </p>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="font-bold text-lg">Operaciones</h2>

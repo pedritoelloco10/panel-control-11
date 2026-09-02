@@ -30,6 +30,11 @@ export function useTurnoDraft(identity) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  // A diferencia de `error` (que es sobre acciones puntuales — abrir/cerrar turno),
+  // esto refleja si el autoguardado periódico está funcionando. Antes fallaba en
+  // silencio: si se cortaba la conexión un rato, esos cambios se perdían sin que
+  // nadie se enterara hasta mucho después.
+  const [autosaveError, setAutosaveError] = useState(false);
 
   const draftRef = useRef(null);
 
@@ -158,20 +163,34 @@ export function useTurnoDraft(identity) {
   draftRef.current = { meta, billInicio, billCierre, stockInicio, stockCierreInf, opsFilled, bajadas, movs, notas };
 
   // Autoguardado cada 6s mientras el turno sigue abierto — así Admin lo ve en vivo
-  // sin que dependa de que el empleado toque nada.
+  // sin que dependa de que el empleado toque nada. Además de eso, guarda apenas la
+  // pestaña se oculta (cambian de app, el celular se bloquea) o la página se cierra:
+  // esperar el intervalo de 6s significaba poder perder justo lo último que se
+  // había tipeado en ese momento — que en la práctica era la causa más común de
+  // billeteras/fichas que quedaban en blanco o a medio cargar.
   useEffect(() => {
     if (!shiftId || !ready) return;
+    let cancelled = false;
     const push = async () => {
       const d = draftRef.current;
-      await supabase.from("shifts").update({
+      const { error: saveErr } = await supabase.from("shifts").update({
         bill_inicio: d.billInicio, bill_cierre: d.billCierre,
         stock_inicio: d.stockInicio, stock_cierre: d.stockCierreInf,
         ops: d.opsFilled, bajadas: d.bajadas, movs: d.movs, notas: d.notas,
         updated_at: new Date().toISOString(),
       }).eq("id", shiftId);
+      if (!cancelled) setAutosaveError(!!saveErr);
     };
     const interval = setInterval(push, 6000);
-    return () => clearInterval(interval);
+    const onVisibility = () => { if (document.hidden) push(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", push);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", push);
+    };
   }, [shiftId, ready]);
 
   async function submitTurno() {
@@ -186,11 +205,15 @@ export function useTurnoDraft(identity) {
       setError("No se pudo verificar las billeteras vigentes: " + walletsErr.message);
       return false;
     }
+    // No alcanza con que el campo no esté vacío: tiene que ser un número de verdad.
+    // Antes, cualquier valor no numérico (por ejemplo un dato corrupto o pegado mal)
+    // pasaba el chequeo de "completo" y después se convertía en 0 en silencio al
+    // calcularse los totales — un cierre que parecía completo pero en realidad
+    // arrastraba un cero disfrazado al turno siguiente.
+    const esNumero = (v) => typeof v === "string" && /^\d+$/.test(v);
     const walletNames = (currentWallets || []).map((w) => w.nombre);
-    const billCierreCompleto = walletNames.length === 0 || walletNames.every(
-      (nombre) => billCierre[nombre] !== undefined && billCierre[nombre] !== "" && billCierre[nombre] !== null
-    );
-    const stockCierreCompleto = stockCierreInf.B !== "" && stockCierreInf.G !== "";
+    const billCierreCompleto = walletNames.length === 0 || walletNames.every((nombre) => esNumero(billCierre[nombre]));
+    const stockCierreCompleto = esNumero(stockCierreInf.B) && esNumero(stockCierreInf.G);
 
     if (!billCierreCompleto || !stockCierreCompleto) {
       setError("Antes de cerrar el turno tenés que cargar todas las billeteras y las fichas de cierre (B y G).");
@@ -222,6 +245,6 @@ export function useTurnoDraft(identity) {
     stockInicio, stockCierreInf, setStockCierreInf, ops, setOps,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
     expected, cierreCheck,
-    saving, error, saved, submitTurno, opsFilledCount: opsFilled.length,
+    saving, error, saved, autosaveError, submitTurno, opsFilledCount: opsFilled.length,
   };
 }

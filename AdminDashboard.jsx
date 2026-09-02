@@ -486,9 +486,20 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
           {liveShifts.length > 0 && (
             <Card icon={<Sparkles size={15} />} title="Turno abierto" subtitle="Si quedó trabado de una prueba, lo podés archivar acá">
-              {liveShifts.map((s) => (
+              {liveShifts.map((s) => {
+                const minsSinceSync = s.updated_at ? Math.floor((Date.now() - new Date(s.updated_at).getTime()) / 60000) : null;
+                const posibleTrabado = minsSinceSync !== null && minsSinceSync >= 3;
+                return (
                 <div key={s.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0 text-xs">
-                  <span className="text-slate-300">{s.responsable} · desde {s.hora_inicio}</span>
+                  <span className="text-slate-300">
+                    {s.responsable} · desde {s.hora_inicio}
+                    {minsSinceSync !== null && (
+                      <span className={posibleTrabado ? "text-amber-400 font-bold" : "text-slate-500"}>
+                        {" "}· última sincronización hace {minsSinceSync < 1 ? "instantes" : `${minsSinceSync} min`}
+                        {posibleTrabado && " — puede estar sin guardar (pestaña cerrada, sin señal)"}
+                      </span>
+                    )}
+                  </span>
                   <button
                     onClick={async () => {
                       if (!window.confirm(`¿Archivar el turno abierto de ${s.responsable}? Es para pruebas viejas o turnos trabados. Queda guardado, no se pierde, pero se libera la caja para abrir uno nuevo.`)) return;
@@ -499,7 +510,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
                     <X size={12} /> Archivar
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </Card>
           )}
 
