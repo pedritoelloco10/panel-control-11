@@ -39,6 +39,11 @@ create table shifts (
   notas text default '',
   mensajes_enviados int not null default 0,
   status text not null default 'abierto', -- 'abierto' | 'cerrado'
+  cerrado_at timestamptz,
+  archivado boolean not null default false, -- turno oculto de listas/estadísticas (pruebas, errores de carga)
+  excluir_arrastre boolean not null default false, -- este cierre no se usa como base del turno siguiente,
+    -- pero sigue contando en las estadísticas (a diferencia de archivado)
+  error_justificado jsonb not null default '{}', -- { efectivo: bool, B: bool, G: bool } — diferencias de cierre ya revisadas por Admin
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

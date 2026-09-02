@@ -897,6 +897,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
               Ventas {money(c.ventasTotal)} · Neto{" "}
               <span className={`font-bold ${c.netoCaja >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{money(c.netoCaja)}</span>
               {" "}· {c.opsCount} registros
+              {s.excluir_arrastre && <span className="text-amber-400 font-bold"> · excluido del arrastre</span>}
             </p>
           </div>
         </div>
@@ -1002,12 +1003,24 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
               Hoja de operaciones ({(s.ops || []).length}) <ChevronRight size={13} />
             </button>
           </div>
-          <button
-            onClick={() => { if (window.confirm(`¿Archivar este turno de ${s.responsable} (${s.fecha})? Deja de aparecer en las listas, pero queda guardado — no se pierde.`)) onDelete(s.id); }}
-            className="text-rose-400 text-[11px] font-bold flex items-center gap-1 mt-1"
-          >
-            <X size={12} /> Archivar este turno (prueba / error de carga)
-          </button>
+          <div className="flex items-center gap-3 mt-1">
+            <button
+              onClick={async () => {
+                await supabase.from("shifts").update({ excluir_arrastre: !s.excluir_arrastre, updated_at: new Date().toISOString() }).eq("id", s.id);
+                onChange();
+              }}
+              className="text-amber-400 text-[11px] font-bold flex items-center gap-1"
+              title="Saca (o vuelve a poner) este cierre como base del próximo turno, sin tocar sus estadísticas."
+            >
+              <Wallet size={12} /> {s.excluir_arrastre ? "Volver a usar como base del arrastre" : "Excluir del arrastre (billeteras/fichas mal cerradas)"}
+            </button>
+            <button
+              onClick={() => { if (window.confirm(`¿Archivar este turno de ${s.responsable} (${s.fecha})? Deja de aparecer en las listas, pero queda guardado — no se pierde.`)) onDelete(s.id); }}
+              className="text-rose-400 text-[11px] font-bold flex items-center gap-1"
+            >
+              <X size={12} /> Archivar este turno (prueba / error de carga)
+            </button>
+          </div>
         </div>
       )}
     </div>
