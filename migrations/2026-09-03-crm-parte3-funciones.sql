@@ -211,6 +211,9 @@ $function$;
 -- insertada) — hay que actualizar el código cliente que la llama (Parte 6).
 -- No auto-detecta duplicados DENTRO del mismo CSV que se está importando,
 -- solo contra contactos que ya existían antes en el sistema — así se pidió.
+-- Postgres no deja cambiar el tipo de retorno con CREATE OR REPLACE — hay
+-- que borrar la versión vieja primero.
+drop function if exists admin_import_contacts(text, uuid, jsonb);
 create or replace function admin_import_contacts(input_admin_pin text, target_base uuid, rows jsonb)
 returns table(insertados int, duplicados int)
 language plpgsql
