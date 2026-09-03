@@ -1,5 +1,5 @@
 import React from "react";
-import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock, WifiOff } from "lucide-react";
+import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock, WifiOff, AlertTriangle } from "lucide-react";
 import { Card, Field, Badge } from "./ui";
 import { PLATFORMS, num, money, classifyTurno, uid } from "./lib";
 
@@ -7,7 +7,20 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
   const { meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
-    expected, cierreCheck, saving, error, saved, autosaveError, submitTurno, opsFilledCount, carriedFrom, otherOpenBy, refuerzoPropioAbierto } = draft;
+    expected, cierreCheck, saving, error, saved, autosaveError, submitTurno, opsFilledCount, carriedFrom, otherOpenBy, refuerzoPropioAbierto, loadError } = draft;
+
+  if (loadError) {
+    return (
+      <div className="pt-5">
+        <Card icon={<AlertTriangle size={15} />} title="No se pudo abrir el turno" subtitle="No se cargó nada — no es seguro seguir">
+          <p className="text-sm text-slate-300 mb-2">{loadError}</p>
+          <p className="text-sm text-slate-400">
+            No se abrió ninguna caja para no arriesgar arrancar con las billeteras o fichas mal. Avisale a tu encargado con este mensaje antes de seguir — no lo intentes de nuevo vos solo.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   if (refuerzoPropioAbierto) {
     return (

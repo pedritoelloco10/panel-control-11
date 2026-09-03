@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { X, Lock, WifiOff } from "lucide-react";
+import { X, Lock, WifiOff, AlertTriangle } from "lucide-react";
 import { Card } from "./ui";
 import { PLATFORMS, num, money, formatMiles, blankOp, seedOps, GROW_BATCH } from "./lib";
 import { supabase } from "./supabaseClient";
 
 export default function OperacionesTab({ draft }) {
-  const { ops, setOps, expected, otherOpenBy, autosaveError } = draft;
+  const { ops, setOps, expected, otherOpenBy, autosaveError, loadError } = draft;
   const [clientesConocidos, setClientesConocidos] = useState([]);
 
   useEffect(() => {
@@ -20,6 +20,16 @@ export default function OperacionesTab({ draft }) {
     if (!v || clientesConocidos.includes(v)) return;
     setClientesConocidos((prev) => [v, ...prev]);
     await supabase.from("clientes").upsert({ identificador: v }, { onConflict: "identificador" });
+  }
+
+  if (loadError) {
+    return (
+      <div className="pt-5">
+        <Card icon={<AlertTriangle size={15} />} title="No se pudo abrir el turno" subtitle="No se cargó nada — no es seguro seguir">
+          <p className="text-sm text-slate-300">{loadError}</p>
+        </Card>
+      </div>
+    );
   }
 
   if (otherOpenBy) {
