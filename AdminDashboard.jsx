@@ -94,6 +94,10 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [refuerzos, setRefuerzos] = useState([]);
   const [accessLog, setAccessLog] = useState([]);
   const [poolDisponible, setPoolDisponible] = useState(0);
+  // Si falla la consulta que trae todos los contactos, antes el panel de Bases
+  // quedaba mostrando "0" en todo silenciosamente, como si las bases estuvieran
+  // vacías. Con esto se ve un aviso en vez de números vacíos que parecen reales.
+  const [basesLoadError, setBasesLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [turnosVisibles, setTurnosVisibles] = useState(15);
@@ -130,7 +134,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
     setDbs(dbList || []);
 
     const stats = {}; const empStats = {}; const worked = []; const reactivables = []; const flat = []; let poolDisponible = 0;
-    const { data: allContacts } = await supabase.rpc("admin_list_contacts", { input_admin_pin: adminPin });
+    const { data: allContacts, error: contactsErr } = await supabase.rpc("admin_list_contacts", { input_admin_pin: adminPin });
+    setBasesLoadError(contactsErr ? "No se pudieron cargar los contactos — los números de abajo no son reales, no te guíes por ellos. Probá 'Actualizar ahora'. Si sigue así: " + contactsErr.message : "");
     for (const d of (dbList || [])) {
       const cs = (allContacts || []).filter((c) => c.base_id === d.id);
       const agregadosPorEmpleado = cs.filter((c) => c.agregado_por && c.agregado_por !== "admin");
@@ -693,6 +698,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
       {tab === "bases" && (
         <>
+          {basesLoadError && (
+            <div className="bg-rose-500/15 ring-1 ring-rose-500/40 rounded-xl px-3.5 py-2.5 mb-3">
+              <p className="text-xs text-rose-300 font-bold">{basesLoadError}</p>
+            </div>
+          )}
           {refuerzos.filter((r) => r.fin).length > 0 && (
             <Card icon={<Users size={15} />} title="Historial de refuerzos" subtitle="Últimas sesiones ya finalizadas, con lo que cada una logró">
               <div className="space-y-2 max-h-72 overflow-y-auto -mx-1 px-1">
