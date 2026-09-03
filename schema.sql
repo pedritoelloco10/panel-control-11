@@ -76,6 +76,10 @@ create table databases (
   -- Si está en true, session_get_leads reparte los leads de esta base antes
   -- que los de las demás de su misma franja de calidad (ver migrations/).
   prioridad boolean not null default false,
+  -- Si está en false, session_get_leads no reparte ningún lead de esta base
+  -- (pausa reversible de la base entera, sin borrar ni descartar sus contactos).
+  activa boolean not null default true,
+  costo numeric not null default 0, -- cuánto se pagó por esta lista, para el reporte de ROI por base
   quota_empleado int, -- sin uso — resabio de un reparto manual anterior al automático (session_get_leads)
   created_at timestamptz not null default now()
 );
@@ -91,18 +95,47 @@ create table contacts (
   agregado_por text, -- 'admin' o nombre de empleado
   trabajada_por text,
   fecha_trabajo date,
-  -- Estado del lead (nuevo/contactado/contestado/interesado/cargado/descartado,
-  -- ver LEAD_STATES en lib.js) y su asignación diaria por el reparto automático
-  -- (session_get_leads, security definer — ver comentario más abajo).
+  -- Estado del lead (nuevo/contactado/contestado/interesado/cargado/descartado/
+  -- para_retomar, ver LEAD_STATES en lib.js) y su asignación diaria por el
+  -- reparto automático (session_get_leads, security definer — ver más abajo).
+  -- `para_retomar` es a dónde va un contacto reciclado automáticamente (ver
+  -- `veces_reciclado`) — no es lo mismo que "nuevo", ya se tocó antes.
   estado text not null default 'nuevo',
   motivo_descarte text,
   ultimo_contacto date,
   asignado_a text, -- nombre de empleado, igual que trabajada_por/agregado_por
   fecha_asignacion date,
   estado_actualizado_at timestamptz, -- cuándo cambió `estado` por última vez (para la cola de urgentes y el reciclado)
+  -- Pausa reversible de un contacto puntual (sale del reparto automático sin
+  -- descartarlo). Distinto de `activa` en databases, que pausa la base entera.
+  pausado boolean not null default false,
+  motivo_pausa text,
+  notas text, -- texto libre, separado de motivo_descarte (que es una lista cerrada)
+  -- Cuántas veces el reciclado automático lo liberó sin que nadie avanzara.
+  -- Al llegar a app_config.max_reciclados, en vez de reciclarse de nuevo pasa
+  -- directo a descartado (ver session_get_leads).
+  veces_reciclado int not null default 0,
+  -- Resumen corto del último evento *humano* (no se toca en el reciclado
+  -- automático) — se muestra al abrir un contacto en para_retomar. El
+  -- historial completo en vivo sigue viviendo en contact_events.
+  ultimo_evento_resumen text,
   created_at timestamptz not null default now()
 );
 create index contacts_base_idx on contacts (base_id);
+
+-- Recordatorios programados por contacto ("recordame esto en X días") — cola
+-- separada de "Urgentes" (esa es por inactividad de 2hs, esto es a pedido).
+create table contact_reminders (
+  id uuid primary key default gen_random_uuid(),
+  contact_id uuid not null references contacts(id) on delete cascade,
+  empleado text not null,
+  recordar_en timestamptz not null,
+  nota text,
+  cumplido boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index contact_reminders_due_idx on contact_reminders (cumplido, recordar_en);
+create index contact_reminders_contact_idx on contact_reminders (contact_id);
 
 -- Respaldo permanente: historial de todo lo que pasa en cada base, no se borra nunca.
 create table contact_events (
@@ -142,10 +175,12 @@ create table app_config (
 );
 insert into app_config (key, value) values
   ('cupo_diario_leads', '35'),        -- leads activos simultáneos por empleado (no es un tope total del día: se liberan lugares a medida que resuelve)
-  ('cupo_refuerzo_leads', '20'),      -- ídem, pero para alguien trabajando como refuerzo
+  ('cupo_refuerzo_leads', '75'),      -- ídem, pero para alguien trabajando como refuerzo (el "20" que aparece como default dentro de session_get_leads es solo el valor de emergencia si esta fila no existiera — el real vigente es este)
   ('porcentaje_relleno', '15'),       -- % del cupo que se llena primero con leads de fuente "masiva"
-  ('dias_reciclar_contactado', '3'),  -- días sin avance en estado "contactado" antes de volver al pool
-  ('horas_reciclar_contestado', '24'); -- horas sin avance en "contestado"/"interesado" antes de volver al pool
+  ('dias_reciclar_contactado', '3'),  -- días sin avance en estado "contactado" antes de reciclar
+  ('horas_reciclar_contestado', '24'), -- horas sin avance en "contestado"/"interesado" antes de reciclar
+  ('max_reciclados', '3'),            -- reciclados antes de descartar automáticamente en vez de mandar a para_retomar de nuevo
+  ('dias_aviso_bajo_rendimiento', '5'); -- días con una base activa y conversión ~0 antes de avisar en Admin
 
 -- ---------- Identificadores de cliente ya vistos (autocompletar en Operaciones) ----------
 create table clientes (
@@ -172,10 +207,11 @@ alter table contact_events enable row level security;
 alter table assignments enable row level security;
 alter table app_config enable row level security;
 alter table clientes enable row level security;
+alter table contact_reminders enable row level security;
 
 -- Sin política = todo acceso directo denegado (solo entra por las funciones
 -- security definer, que no dependen de RLS).
--- employees, contacts, contact_events, assignments: sin políticas.
+-- employees, contacts, contact_events, assignments, contact_reminders: sin políticas.
 
 -- wallets y databases: la app SÍ las lee directo desde el cliente (nombres
 -- de billeteras, lista de bases), pero toda escritura ya pasa por funciones
