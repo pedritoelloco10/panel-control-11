@@ -92,6 +92,10 @@ export default function AdminDashboard({ adminPin, onExit }) {
   // si un contacto se reasigna y otra persona lo vuelve a tocar después, esas
   // dos columnas se pisan y el mensaje del primero desaparecía de las stats).
   const [activityByEmpDate, setActivityByEmpDate] = useState([]);
+  // Actividad de Bases (mensajes mandados) recortada a la ventana exacta de
+  // cada turno puntual — a diferencia de activityByEmpDate (por día completo),
+  // esto separa a un mismo empleado si abrió más de un turno el mismo día.
+  const [activityByShift, setActivityByShift] = useState({});
   const [reactivables, setReactivables] = useState([]);
   const [allContactsFlat, setAllContactsFlat] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
@@ -173,6 +177,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
     const { data: activity } = await supabase.rpc("admin_activity_por_empleado_fecha", { input_admin_pin: adminPin });
     setActivityByEmpDate(activity || []);
+
+    const { data: activityShift } = await supabase.rpc("admin_activity_por_turno", { input_admin_pin: adminPin });
+    const shiftMap = {};
+    (activityShift || []).forEach((a) => { shiftMap[a.shift_id] = a; });
+    setActivityByShift(shiftMap);
 
     const { data: sessions } = await supabase.rpc("admin_active_sessions", { input_admin_pin: adminPin });
     setActiveSessions(sessions || []);
@@ -687,6 +696,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               onDelete={async (id) => { await supabase.rpc("admin_toggle_archivado", { input_admin_pin: adminPin, target_id: id, nuevo_archivado: true }); setExpanded(null); loadAll(); }}
               onOpenOps={setOpsModal}
               adminPin={adminPin} onChange={loadAll}
+              basesActivity={activityByShift[c.shift.id]}
             />
           ))}
           {turnosVisibles < computedAll.length && (
@@ -917,7 +927,7 @@ function PlataformaBreakdown({ porPlataforma }) {
   );
 }
 
-function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChange }) {
+function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChange, basesActivity }) {
   const s = c.shift;
   const ok = !c.hasError;
   return (
@@ -935,6 +945,12 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
               {" "}· {c.opsCount} registros
               {s.excluir_arrastre && <span className="text-amber-400 font-bold"> · excluido del arrastre</span>}
             </p>
+            {basesActivity && basesActivity.contactaron > 0 && (
+              <p className="text-[11px] text-slate-500">
+                Bases: <span className="text-slate-300 font-bold">{basesActivity.contactaron} contactó</span>
+                {" · "}{basesActivity.contestaron} contestó · {basesActivity.cargaron} cargó
+              </p>
+            )}
           </div>
         </div>
         {ok ? <CheckCircle2 size={16} className="text-emerald-400 flex-none" /> : <AlertTriangle size={16} className="text-amber-400 flex-none" />}
