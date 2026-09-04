@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   Sparkles, BarChart3, TrendingUp, Database, Users, Wallet, Lock,
   ArrowLeft, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle,
-  Pencil, X, Plus, Upload, Coins, Star,
+  Pencil, X, Plus, Upload, Coins, Star, Search, Power, DollarSign, Clock,
 } from "lucide-react";
 import { Card, StatBox, MiniStat } from "./ui";
 import { supabase } from "./supabaseClient";
-import { PLATFORMS, FUENTE_TYPES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno } from "./lib";
+import { PLATFORMS, FUENTE_TYPES, LEAD_STATES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno } from "./lib";
 
 const CSV_HEADERS = [
   { key: "nombre", label: "Nombre" },
@@ -753,7 +753,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               </div>
             </Card>
           )}
-          <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} adminPin={adminPin} onChange={loadAll} />
+          <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} shifts={shifts} liveShifts={liveShifts} adminPin={adminPin} onChange={loadAll} />
         </>
       )}
       {tab === "clientes" && <ClientesRanking computedAll={computedAll} />}
@@ -1193,20 +1193,29 @@ function WalletManager({ wallets, adminPin, onChange }) {
   );
 }
 
-function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, poolDisponible, adminPin, onChange }) {
+function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, poolDisponible, shifts, liveShifts, adminPin, onChange }) {
   const [newBaseName, setNewBaseName] = useState("");
   const [newBaseFuente, setNewBaseFuente] = useState("masiva");
+  const [newBaseCosto, setNewBaseCosto] = useState("");
   const [cupo, setCupo] = useState("35");
+  const [diasAviso, setDiasAviso] = useState("5");
   const [cupoSaved, setCupoSaved] = useState(false);
-  const [fileRef, setFileRef] = useState(null);
   const [importTargetBase, setImportTargetBase] = useState("");
+  const [importResult, setImportResult] = useState(null);
   const [eventsBase, setEventsBase] = useState(null);
   const [events, setEvents] = useState([]);
+  const [fichaBase, setFichaBase] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("app_config").select("value").eq("key", "cupo_diario_leads").single();
-      if (data) setCupo(data.value);
+      const { data } = await supabase.from("app_config").select("key, value").in("key", ["cupo_diario_leads", "dias_aviso_bajo_rendimiento"]);
+      (data || []).forEach((row) => {
+        if (row.key === "cupo_diario_leads") setCupo(row.value);
+        if (row.key === "dias_aviso_bajo_rendimiento") setDiasAviso(row.value);
+      });
     })();
   }, []);
 
@@ -1217,8 +1226,8 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
 
   async function createBase() {
     const nombre = newBaseName.trim() || `Lista ${todayStr()}`;
-    await supabase.rpc("admin_create_base", { input_admin_pin: adminPin, nombre, tipo_fuente: newBaseFuente });
-    setNewBaseName(""); onChange();
+    await supabase.rpc("admin_create_base", { input_admin_pin: adminPin, nombre, tipo_fuente: newBaseFuente, nuevo_costo: num(newBaseCosto) || 0 });
+    setNewBaseName(""); setNewBaseCosto(""); onChange();
   }
 
   function handleFile(e) {
@@ -1239,7 +1248,8 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         rows.push({ nombre: parts[0], numero: parts[1] || "" });
       }
       if (rows.length) {
-        await supabase.rpc("admin_import_contacts", { input_admin_pin: adminPin, target_base: importTargetBase, rows });
+        const { data } = await supabase.rpc("admin_import_contacts", { input_admin_pin: adminPin, target_base: importTargetBase, rows });
+        setImportResult((data && data[0]) || { insertados: 0, duplicados: 0 });
         onChange();
       }
     };
@@ -1253,8 +1263,43 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
     setEvents(data || []);
   }
 
+  async function doSearch() {
+    if (!searchQuery.trim()) { setSearchResults(null); return; }
+    setSearching(true);
+    const { data } = await supabase.rpc("admin_search_contacts", { input_admin_pin: adminPin, query: searchQuery.trim() });
+    setSearchResults(data || []);
+    setSearching(false);
+  }
+
+  const bajoRendimiento = useMemo(() => {
+    const dias = parseInt(diasAviso, 10) || 5;
+    return dbs.filter((d) => {
+      if (d.activa === false) return false;
+      const edad = daysSince(d.created_at?.slice(0, 10));
+      if (edad < dias) return false;
+      const s = dbStats[d.id];
+      if (!s || s.total === 0) return false;
+      return s.cargaron / s.total < 0.02;
+    });
+  }, [dbs, dbStats, diasAviso]);
+
+  const fichaContacts = useMemo(() => {
+    if (!fichaBase) return [];
+    return allContactsFlat.filter((c) => c.base_id === fichaBase.id);
+  }, [fichaBase, allContactsFlat]);
+
   return (
     <>
+      {bajoRendimiento.length > 0 && (
+        <div className="bg-rose-500/10 ring-1 ring-rose-500/30 rounded-xl px-3.5 py-2.5 mb-3">
+          <p className="text-xs font-bold text-rose-400 mb-1.5 flex items-center gap-1.5"><AlertTriangle size={13} /> {bajoRendimiento.length} base{bajoRendimiento.length !== 1 ? "s" : ""} activa{bajoRendimiento.length !== 1 ? "s" : ""} con bajo rendimiento</p>
+          {bajoRendimiento.map((d) => (
+            <p key={d.id} className="text-[10px] text-slate-400">
+              {d.nombre} — creada hace {daysSince(d.created_at?.slice(0, 10))} días, {dbStats[d.id]?.cargaron || 0} cargados de {dbStats[d.id]?.total || 0}
+            </p>
+          ))}
+        </div>
+      )}
       {reactivables.length > 0 && (
         <Card icon={<Sparkles size={15} />} title="Para reactivar" subtitle={`${reactivables.length} contactos que ya cargaron y llevan ${REACTIVACION_DIAS}+ días sin que nadie los toque`}>
           <div className="space-y-1.5 max-h-72 overflow-y-auto">
@@ -1290,10 +1335,43 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
           ))}
         </div>
         <p className="text-[10px] text-slate-600 mb-2">{FUENTE_TYPES.find((f) => f.key === newBaseFuente)?.hint}</p>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 mb-1.5">
           <input value={newBaseName} onChange={(e) => setNewBaseName(e.target.value)} placeholder={`Base nueva (ej: Lista ${todayStr()})`} className="input flex-1 text-xs" />
-          <button onClick={createBase} className="bg-white/5 ring-1 ring-white/10 rounded-lg px-3 flex items-center gap-1 text-xs font-bold"><Plus size={13} /> Crear</button>
+          <input value={newBaseCosto} onChange={(e) => setNewBaseCosto(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Costo (opcional)" className="input w-32 text-xs" />
         </div>
+        <button onClick={createBase} className="w-full bg-white/5 ring-1 ring-white/10 rounded-lg px-3 py-2 flex items-center justify-center gap-1 text-xs font-bold"><Plus size={13} /> Crear</button>
+      </Card>
+
+      <Card icon={<Search size={15} />} title="Buscador global" subtitle="Por nombre o teléfono, en todas las bases a la vez">
+        <div className="flex gap-1.5 mb-2">
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doSearch()} placeholder="Nombre o número..." className="input flex-1 text-xs" />
+          <button onClick={doSearch} disabled={searching} className="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-lg px-4 text-xs font-bold disabled:opacity-60">{searching ? "..." : "Buscar"}</button>
+        </div>
+        {searchResults !== null && (
+          <div className="space-y-1.5 max-h-72 overflow-y-auto -mx-1 px-1">
+            {searchResults.length === 0 && <p className="text-slate-600 text-xs italic">Sin resultados.</p>}
+            {searchResults.map((c) => (
+              <div key={c.id} className="flex items-center justify-between gap-2 bg-black/20 rounded-lg px-2.5 py-2 text-xs">
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{c.nombre} {c.pausado && <span className="text-amber-400 font-normal">· pausado</span>}</p>
+                  <p className="text-[10px] text-slate-500 truncate">
+                    {c.numero || "sin número"} · {c.base_nombre} · {LEAD_STATES.find((s) => s.key === c.estado)?.label || c.estado || "Nuevo"}
+                    {c.asignado_a && ` · asignado a ${c.asignado_a}`}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    await supabase.rpc("admin_toggle_pausado", { input_admin_pin: adminPin, target_id: c.id, nuevo_pausado: !c.pausado });
+                    doSearch(); onChange();
+                  }}
+                  className="text-[10px] font-bold text-amber-400 flex-none"
+                >
+                  {c.pausado ? "Despausar" : "Pausar"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card icon={<Upload size={15} />} title="Subir contactos a una base">
@@ -1305,6 +1383,12 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         </div>
         <input type="file" accept=".csv,.txt" disabled={!importTargetBase} onChange={handleFile} className="text-xs text-slate-400" />
         <p className="text-[10px] text-slate-600 mt-2">Archivo .csv o .txt, una línea por contacto: nombre,número</p>
+        {importResult && (
+          <p className="text-[10px] mt-2">
+            <span className="text-emerald-400 font-bold">{importResult.insertados} cargado{importResult.insertados !== 1 ? "s" : ""}</span>
+            {importResult.duplicados > 0 && <span className="text-amber-400"> · {importResult.duplicados} salteado{importResult.duplicados !== 1 ? "s" : ""} por ya existir (mismo teléfono en otra base)</span>}
+          </p>
+        )}
       </Card>
 
       <Card icon={<Users size={15} />} title="Reparto automático" subtitle="Cada empleado recibe contactos solo hasta este cupo, tomados del pool compartido">
@@ -1359,10 +1443,11 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         {[...dbs].sort((a, b) => (b.prioridad ? 1 : 0) - (a.prioridad ? 1 : 0)).map((d) => {
           const s = dbStats[d.id] || { total: 0, enviados: 0, contestados: 0, cargaron: 0, pendientes: 0, trabajados3d: 0, agregadosPorEmpleado: [] };
           const avance = s.total ? Math.round((s.enviados / s.total) * 100) : 0;
+          const pausada = d.activa === false;
           return (
             <div
               key={d.id}
-              className={`rounded-xl px-3 py-2.5 mb-2 last:mb-0 ${d.prioridad ? "bg-amber-500/10 ring-1 ring-amber-500/30" : "bg-white/[0.02] ring-1 ring-white/5"}`}
+              className={`rounded-xl px-3 py-2.5 mb-2 last:mb-0 ${pausada ? "opacity-50 bg-white/[0.02] ring-1 ring-white/5" : d.prioridad ? "bg-amber-500/10 ring-1 ring-amber-500/30" : "bg-white/[0.02] ring-1 ring-white/5"}`}
             >
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -1376,12 +1461,24 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
                   >
                     <Star size={14} fill={d.prioridad ? "currentColor" : "none"} />
                   </button>
+                  <button
+                    onClick={async () => {
+                      await supabase.rpc("admin_toggle_base_activa", { input_admin_pin: adminPin, target_id: d.id, nueva_activa: pausada });
+                      onChange();
+                    }}
+                    title={pausada ? "Reactivar base" : "Pausar base (sale del reparto, no se borra nada)"}
+                    className={`flex-none ${pausada ? "text-slate-600 hover:text-emerald-400" : "text-emerald-400 hover:text-slate-600"}`}
+                  >
+                    <Power size={14} />
+                  </button>
                   <p className="font-bold text-sm truncate">{d.nombre}</p>
                   <span className="text-[9px] text-slate-500 bg-white/5 rounded-full px-2 py-0.5 flex-none">
                     {FUENTE_TYPES.find((f) => f.key === d.tipo_fuente)?.label || d.tipo_fuente}
                   </span>
+                  {pausada && <span className="text-[9px] text-rose-400 font-bold flex-none">Pausada</span>}
                 </div>
                 <div className="flex items-center gap-2.5 flex-none">
+                  <button onClick={() => setFichaBase(d)} className="text-[10px] text-emerald-400 font-bold">Ficha completa</button>
                   <button onClick={() => viewEvents(d.id, d.nombre)} className="text-[10px] text-indigo-300 font-bold">Historial</button>
                   <button
                     onClick={async () => {
@@ -1429,7 +1526,194 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
           </div>
         </Card>
       )}
+
+      {fichaBase && (
+        <BaseFicha
+          base={fichaBase}
+          contacts={fichaContacts}
+          shifts={shifts}
+          liveShifts={liveShifts}
+          adminPin={adminPin}
+          onChange={onChange}
+          onClose={() => setFichaBase(null)}
+        />
+      )}
     </>
+  );
+}
+
+function BaseFicha({ base, contacts, shifts, liveShifts, adminPin, onChange, onClose }) {
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [rangeKey, setRangeKey] = useState("todo");
+  const [costoInput, setCostoInput] = useState(String(num(base.costo)));
+  const [costoSaved, setCostoSaved] = useState(false);
+
+  function applyPreset(key) {
+    setRangeKey(key);
+    const today = todayStr();
+    if (key === "hoy") { setDateFrom(today); setDateTo(today); }
+    else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
+    else if (key === "mes") { const d = new Date(); d.setDate(1); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
+    else if (key === "todo") { setDateFrom(""); setDateTo(""); }
+  }
+
+  const filtrados = useMemo(() => {
+    return contacts.filter((c) => {
+      const fecha = c.fecha_asignacion || c.created_at?.slice(0, 10);
+      if (dateFrom && fecha && fecha < dateFrom) return false;
+      if (dateTo && fecha && fecha > dateTo) return false;
+      return true;
+    });
+  }, [contacts, dateFrom, dateTo]);
+
+  const embudo = useMemo(() => {
+    const map = {}; LEAD_STATES.forEach((s) => (map[s.key] = 0));
+    let pausados = 0;
+    filtrados.forEach((c) => {
+      const estado = c.estado || "nuevo";
+      map[estado] = (map[estado] || 0) + 1;
+      if (c.pausado) pausados++;
+    });
+    return { ...map, pausados };
+  }, [filtrados]);
+
+  const total = filtrados.length;
+  const enviados = filtrados.filter((c) => c.enviado).length;
+  const contestadosCount = filtrados.filter((c) => c.contestado).length;
+  const cargaronCount = filtrados.filter((c) => c.cargo).length;
+  const tasaContesto = enviados ? Math.round((contestadosCount / enviados) * 100) : 0;
+  const tasaCargo = contestadosCount ? Math.round((cargaronCount / contestadosCount) * 100) : 0;
+
+  const tiempoPromedio = useMemo(() => {
+    const dias = [];
+    filtrados.forEach((c) => {
+      if (c.estado === "cargado" && c.fecha_asignacion && c.estado_actualizado_at) {
+        const d = (new Date(c.estado_actualizado_at) - new Date(c.fecha_asignacion)) / 86400000;
+        if (d >= 0) dias.push(d);
+      }
+    });
+    if (!dias.length) return null;
+    return dias.reduce((a, b) => a + b, 0) / dias.length;
+  }, [filtrados]);
+
+  const motivos = useMemo(() => {
+    const map = {};
+    filtrados.forEach((c) => { if (c.estado === "descartado" && c.motivo_descarte) map[c.motivo_descarte] = (map[c.motivo_descarte] || 0) + 1; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [filtrados]);
+
+  const porEmpleado = useMemo(() => {
+    const map = {};
+    filtrados.forEach((c) => {
+      if (!c.trabajada_por) return;
+      if (!map[c.trabajada_por]) map[c.trabajada_por] = { tocaron: 0, contactaron: 0, cargaron: 0 };
+      map[c.trabajada_por].tocaron++;
+      if (c.enviado) map[c.trabajada_por].contactaron++;
+      if (c.cargo) map[c.trabajada_por].cargaron++;
+    });
+    return Object.entries(map).sort((a, b) => b[1].cargaron - a[1].cargaron);
+  }, [filtrados]);
+
+  const ventasVinculadas = useMemo(() => {
+    let t = 0;
+    [...shifts, ...liveShifts].forEach((s) => {
+      if (dateFrom && s.fecha < dateFrom) return;
+      if (dateTo && s.fecha > dateTo) return;
+      (s.ops || []).forEach((o) => { if (o.origen_base_id === base.id && o.tipo === "carga") t += num(o.monto); });
+    });
+    return t;
+  }, [shifts, liveShifts, base.id, dateFrom, dateTo]);
+
+  const costo = num(base.costo);
+  const roi = costo > 0 ? Math.round(((ventasVinculadas - costo) / costo) * 100) : null;
+
+  async function saveCosto() {
+    await supabase.rpc("admin_set_base_costo", { input_admin_pin: adminPin, target_id: base.id, nuevo_costo: num(costoInput) || 0 });
+    setCostoSaved(true); setTimeout(() => setCostoSaved(false), 1500);
+    onChange();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto">
+      <div className="max-w-3xl mx-auto p-4">
+        <div className="flex items-center justify-between mb-4 sticky top-0 bg-slate-950 pt-1 pb-3 z-10">
+          <div>
+            <h3 className="font-bold text-lg">{base.nombre}</h3>
+            <p className="text-slate-500 text-xs">{FUENTE_TYPES.find((f) => f.key === base.tipo_fuente)?.label || base.tipo_fuente}</p>
+          </div>
+          <button onClick={onClose} className="bg-white/5 ring-1 ring-white/10 rounded-lg p-2"><X size={16} /></button>
+        </div>
+
+        <DateRangeFilter rangeKey={rangeKey} dateFrom={dateFrom} dateTo={dateTo} onPreset={applyPreset} onFrom={(v) => { setRangeKey("custom"); setDateFrom(v); }} onTo={(v) => { setRangeKey("custom"); setDateTo(v); }} />
+
+        <Card icon={<BarChart3 size={15} />} title="Embudo" subtitle={`${total} contactos en el período`}>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {LEAD_STATES.map((s) => (<MiniStat key={s.key} label={s.label} value={embudo[s.key] || 0} />))}
+            <MiniStat label="Pausados" value={embudo.pausados} />
+          </div>
+        </Card>
+
+        <Card icon={<Clock size={15} />} title="Tasas y tiempos">
+          <div className="grid grid-cols-3 gap-2 text-center mb-2">
+            <div className="bg-white/5 rounded-xl p-2.5">
+              <p className="text-[9px] text-slate-500 uppercase">% contestó</p>
+              <p className="text-lg font-black">{tasaContesto}%</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-2.5">
+              <p className="text-[9px] text-slate-500 uppercase">% cargó (de contestó)</p>
+              <p className="text-lg font-black">{tasaCargo}%</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-2.5">
+              <p className="text-[9px] text-slate-500 uppercase">Días prom. a cargar</p>
+              <p className="text-lg font-black">{tiempoPromedio !== null ? tiempoPromedio.toFixed(1) : "—"}</p>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-600">El tiempo de conversión es aproximado — se calcula desde que se asignó hasta la última vez que cambió de estado. Si un contacto ya cargado se reactivó después, ese número se corre.</p>
+        </Card>
+
+        {motivos.length > 0 && (
+          <Card icon={<AlertTriangle size={15} />} title="Motivos de descarte más frecuentes">
+            {motivos.map(([motivo, n]) => (
+              <p key={motivo} className="text-xs text-slate-400 flex justify-between py-1"><span>{motivo}</span><span className="font-bold text-slate-200">{n}</span></p>
+            ))}
+          </Card>
+        )}
+
+        {porEmpleado.length > 0 && (
+          <Card icon={<Users size={15} />} title="Desglose por empleado">
+            {porEmpleado.map(([emp, e]) => (
+              <div key={emp} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0 text-xs">
+                <span className="font-bold">{emp}</span>
+                <span className="text-slate-400">{e.tocaron} tocaron · {e.contactaron} contactaron · <span className="text-emerald-400 font-bold">{e.cargaron} cargaron</span></span>
+              </div>
+            ))}
+          </Card>
+        )}
+
+        <Card icon={<DollarSign size={15} />} title="Costo y ROI">
+          <div className="flex gap-1.5 mb-3">
+            <input value={costoInput} onChange={(e) => setCostoInput(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Costo de la lista" className="input flex-1 text-xs" />
+            <button onClick={saveCosto} className="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-lg px-3 text-xs font-bold">{costoSaved ? "✓" : "Guardar"}</button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-white/5 rounded-xl p-2.5">
+              <p className="text-[9px] text-slate-500 uppercase">Costo</p>
+              <p className="text-sm font-black">{money(costo)}</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-2.5">
+              <p className="text-[9px] text-slate-500 uppercase">Ventas vinculadas</p>
+              <p className="text-sm font-black text-emerald-400">{money(ventasVinculadas)}</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-2.5">
+              <p className="text-[9px] text-slate-500 uppercase">ROI</p>
+              <p className={`text-sm font-black ${roi === null ? "text-slate-500" : roi >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{roi === null ? "—" : `${roi}%`}</p>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-600 mt-2">"Ventas vinculadas" son las cargas con origen "Lista" en Operaciones que se pudieron cruzar automáticamente con un contacto cargado de esta base por los últimos dígitos del teléfono — puede no ser exacto al 100%.</p>
+        </Card>
+      </div>
+    </div>
   );
 }
 

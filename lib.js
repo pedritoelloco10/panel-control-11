@@ -14,6 +14,9 @@ export const LEAD_STATES = [
   { key: "interesado", label: "Interesado", color: "amber" },
   { key: "cargado", label: "Cargó", color: "emerald" },
   { key: "descartado", label: "Descartado", color: "rose" },
+  // Adonde va un contacto reciclado automáticamente (ver veces_reciclado) —
+  // distinto tanto de "Nuevo" como de cualquier estado resuelto, a propósito.
+  { key: "para_retomar", label: "Para retomar", color: "orange" },
 ];
 export const MOTIVOS_DESCARTE = ["No contestó", "No le interesó", "Número inválido", "Ya es cliente por otro medio"];
 export const REACTIVACION_DIAS = 7;
