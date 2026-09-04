@@ -1206,6 +1206,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
   const [cupoSaved, setCupoSaved] = useState(false);
   const [importTargetBase, setImportTargetBase] = useState("");
   const [importResult, setImportResult] = useState(null);
+  const [importError, setImportError] = useState("");
   const [eventsBase, setEventsBase] = useState(null);
   const [events, setEvents] = useState([]);
   const [fichaBase, setFichaBase] = useState(null);
@@ -1237,11 +1238,12 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file || !importTargetBase) return;
+    setImportResult(null); setImportError("");
     const reader = new FileReader();
     reader.onload = async () => {
       const text = String(reader.result || "");
       const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      if (!lines.length) return;
+      if (!lines.length) { setImportError("El archivo está vacío o no se pudo leer."); return; }
       const sep = lines[0].includes(",") ? "," : lines[0].includes("\t") ? "\t" : ";";
       let start = 0;
       if (/nombre/i.test(lines[0])) start = 1;
@@ -1251,12 +1253,13 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         if (!parts[0]) continue;
         rows.push({ nombre: parts[0], numero: parts[1] || "" });
       }
-      if (rows.length) {
-        const { data } = await supabase.rpc("admin_import_contacts", { input_admin_pin: adminPin, target_base: importTargetBase, rows });
-        setImportResult((data && data[0]) || { insertados: 0, duplicados: 0 });
-        onChange();
-      }
+      if (!rows.length) { setImportError("No se encontró ningún contacto válido en el archivo (¿le falta el nombre a todas las filas?)."); return; }
+      const { data, error } = await supabase.rpc("admin_import_contacts", { input_admin_pin: adminPin, target_base: importTargetBase, rows });
+      if (error) { setImportError("No se pudo importar: " + error.message); return; }
+      setImportResult((data && data[0]) || { insertados: 0, duplicados: 0 });
+      onChange();
     };
+    reader.onerror = () => setImportError("No se pudo leer el archivo.");
     reader.readAsText(file);
     e.target.value = "";
   }
@@ -1387,6 +1390,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         </div>
         <input type="file" accept=".csv,.txt" disabled={!importTargetBase} onChange={handleFile} className="text-xs text-slate-400" />
         <p className="text-[10px] text-slate-600 mt-2">Archivo .csv o .txt, una línea por contacto: nombre,número</p>
+        {importError && <p className="text-[10px] mt-2 text-rose-400 font-bold">{importError}</p>}
         {importResult && (
           <p className="text-[10px] mt-2">
             <span className="text-emerald-400 font-bold">{importResult.insertados} cargado{importResult.insertados !== 1 ? "s" : ""}</span>
