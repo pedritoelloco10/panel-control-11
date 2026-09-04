@@ -87,7 +87,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [dbs, setDbs] = useState([]);
   const [dbStats, setDbStats] = useState({});
   const [empTodayBaseStats, setEmpTodayBaseStats] = useState({});
-  const [workedContacts, setWorkedContacts] = useState([]);
+  // Actividad histórica por empleado+fecha, sacada de contact_events (nunca se
+  // pisa) en vez de contacts.trabajada_por/fecha_trabajo (solo el último toque —
+  // si un contacto se reasigna y otra persona lo vuelve a tocar después, esas
+  // dos columnas se pisan y el mensaje del primero desaparecía de las stats).
+  const [activityByEmpDate, setActivityByEmpDate] = useState([]);
   const [reactivables, setReactivables] = useState([]);
   const [allContactsFlat, setAllContactsFlat] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
@@ -133,7 +137,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
     setWallets(wal || []);
     setDbs(dbList || []);
 
-    const stats = {}; const empStats = {}; const worked = []; const reactivables = []; const flat = []; let poolDisponible = 0;
+    const stats = {}; const empStats = {}; const reactivables = []; const flat = []; let poolDisponible = 0;
     const { data: allContacts, error: contactsErr } = await supabase.rpc("admin_list_contacts", { input_admin_pin: adminPin });
     setBasesLoadError(contactsErr ? "No se pudieron cargar los contactos — los números de abajo no son reales, no te guíes por ellos. Probá 'Actualizar ahora'. Si sigue así: " + contactsErr.message : "");
     for (const d of (dbList || [])) {
@@ -153,9 +157,6 @@ export default function AdminDashboard({ adminPin, onExit }) {
       cs.forEach((c) => {
         flat.push({ ...c, base_nombre: d.nombre });
         if (["nuevo", "contactado"].includes(c.estado || "nuevo") && (!c.asignado_a || c.fecha_asignacion < todayStr())) poolDisponible++;
-        if (c.fecha_trabajo && c.trabajada_por) {
-          worked.push({ trabajada_por: c.trabajada_por, fecha: c.fecha_trabajo, enviado: !!c.enviado, contestado: !!c.contestado, cargo: !!c.cargo });
-        }
         if (c.fecha_trabajo === todayStr() && c.trabajada_por) {
           if (!empStats[c.trabajada_por]) empStats[c.trabajada_por] = { contactados: 0, contestados: 0, cargaron: 0 };
           if (c.enviado) empStats[c.trabajada_por].contactados++;
@@ -167,8 +168,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
         }
       });
     }
-    setDbStats(stats); setEmpTodayBaseStats(empStats); setWorkedContacts(worked); setReactivables(reactivables);
+    setDbStats(stats); setEmpTodayBaseStats(empStats); setReactivables(reactivables);
     setAllContactsFlat(flat); setPoolDisponible(poolDisponible);
+
+    const { data: activity } = await supabase.rpc("admin_activity_por_empleado_fecha", { input_admin_pin: adminPin });
+    setActivityByEmpDate(activity || []);
 
     const { data: sessions } = await supabase.rpc("admin_active_sessions", { input_admin_pin: adminPin });
     setActiveSessions(sessions || []);
@@ -241,17 +245,17 @@ export default function AdminDashboard({ adminPin, onExit }) {
       e.turnos++; e.cargas += c.cargasCount; e.retiros += c.retirosCount;
       if (c.hasError) { e.errores++; e.diffEfectivoTotal += Math.abs(c.diffEfectivo); PLATFORMS.forEach((p) => { if (c.diffFichas[p.key] !== null) e.diffFichas[p.key] += Math.abs(c.diffFichas[p.key]); }); }
     });
-    workedContacts.forEach((w) => {
+    activityByEmpDate.forEach((w) => {
       if (dateFrom && w.fecha < dateFrom) return;
       if (dateTo && w.fecha > dateTo) return;
-      if (!map[w.trabajada_por]) map[w.trabajada_por] = { turnos: 0, contactaron: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
-      const e = map[w.trabajada_por];
-      if (w.enviado) e.contactaron++;
-      if (w.contestado) e.contestaron++;
-      if (w.cargo) e.cargaron++;
+      if (!map[w.empleado]) map[w.empleado] = { turnos: 0, contactaron: 0, contestaron: 0, cargaron: 0, cargas: 0, retiros: 0, errores: 0, diffEfectivoTotal: 0, diffFichas: { B: 0, G: 0 } };
+      const e = map[w.empleado];
+      e.contactaron += w.contactaron;
+      e.contestaron += w.contestaron;
+      e.cargaron += w.cargaron;
     });
     return Object.entries(map).sort((a, b) => b[1].turnos - a[1].turnos);
-  }, [computed, workedContacts, dateFrom, dateTo]);
+  }, [computed, activityByEmpDate, dateFrom, dateTo]);
 
   const byTurno = useMemo(() => {
     const map = { Mañana: { ventas: 0, neto: 0, count: 0 }, Tarde: { ventas: 0, neto: 0, count: 0 }, Noche: { ventas: 0, neto: 0, count: 0 } };
@@ -278,16 +282,16 @@ export default function AdminDashboard({ adminPin, onExit }) {
       e.opsDerivado += c.derivados;
       e.opsLista += c.cargasLista;
     });
-    workedContacts.forEach((w) => {
+    activityByEmpDate.forEach((w) => {
       if (dateFrom && w.fecha < dateFrom) return;
       if (dateTo && w.fecha > dateTo) return;
       const e = ensure(w.fecha);
-      if (w.enviado) e.enviados++;
-      if (w.contestado) e.contestados++;
-      if (w.cargo) e.cargaron++;
+      e.enviados += w.contactaron;
+      e.contestados += w.contestaron;
+      e.cargaron += w.cargaron;
     });
     return Object.values(map).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
-  }, [computed, workedContacts, dateFrom, dateTo]);
+  }, [computed, activityByEmpDate, dateFrom, dateTo]);
 
   const ahoraMismo = useMemo(() => {
     const live = liveShifts[0];
@@ -714,12 +718,12 @@ export default function AdminDashboard({ adminPin, onExit }) {
                   const mins = minutos % 60;
                   const duracion = horas > 0 ? `${horas}h ${mins}m` : `${mins}m`;
                   const fechaSesion = inicio.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-                  const st = workedContacts
-                    .filter((w) => w.trabajada_por === r.empleado && w.fecha === fechaSesion)
+                  const st = activityByEmpDate
+                    .filter((w) => w.empleado === r.empleado && w.fecha === fechaSesion)
                     .reduce((acc, w) => {
-                      if (w.enviado) acc.contactados++;
-                      if (w.contestado) acc.contestados++;
-                      if (w.cargo) acc.cargaron++;
+                      acc.contactados += w.contactaron;
+                      acc.contestados += w.contestaron;
+                      acc.cargaron += w.cargaron;
                       return acc;
                     }, { contactados: 0, contestados: 0, cargaron: 0 });
                   return (
