@@ -44,10 +44,10 @@ begin
     count(*) filter (where e.resultado in ('contestado', 'interesado', 'cargado'))::int as contestaron,
     count(*) filter (where e.resultado = 'cargado')::int as cargaron
   from (
-    select empleado, created_at, split_part(accion, ':', 2) as resultado
+    select contact_events.empleado, contact_events.created_at, split_part(contact_events.accion, ':', 2) as resultado
     from contact_events
-    where (accion like 'estado:%' or accion like 'urgente:%')
-      and empleado is not null and empleado <> 'sistema'
+    where (contact_events.accion like 'estado:%' or contact_events.accion like 'urgente:%')
+      and contact_events.empleado is not null and contact_events.empleado <> 'sistema'
   ) e
   group by e.empleado, (e.created_at at time zone 'America/Argentina/Buenos_Aires')::date;
 end;
