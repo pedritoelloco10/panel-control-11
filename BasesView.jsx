@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Database, Users, Plus, Sparkles, ChevronDown, Flame, Clock, Pause, Play, History, StickyNote, Check } from "lucide-react";
+import { Database, Users, Plus, Sparkles, ChevronDown, Flame, Clock, Pause, Play, History, StickyNote, Check, List, LayoutGrid } from "lucide-react";
 import { Card } from "./ui";
 import { todayStr, LEAD_STATES, MOTIVOS_DESCARTE } from "./lib";
 import { supabase } from "./supabaseClient";
@@ -25,6 +25,12 @@ const ACTIVE_CLASSES = {
 // "para_retomar" cuenta como pendiente — es un contacto que ya se trabajó
 // antes y volvió al pool, no algo resuelto.
 const ACTIVOS = ["nuevo", "contactado", "contestado", "interesado", "para_retomar"];
+// Columnas de la vista Kanban — mismos 5 estados que ya son botones manuales
+// en la lista (sin "Descartado", que tiene su propio flujo con motivo, ni
+// "Para retomar", que se agrupa dentro de "Nuevo" para no sumar una columna
+// que nadie puede arrastrar manualmente hacia ella).
+const KANBAN_COLUMNS = LEAD_STATES.filter((s) => !["descartado", "para_retomar"].includes(s.key));
+const columnaDe = (estado) => (estado === "para_retomar" ? "nuevo" : estado || "nuevo");
 
 export default function BasesView({ identity, onLogout }) {
   const [contacts, setContacts] = useState([]);
@@ -49,6 +55,9 @@ export default function BasesView({ identity, onLogout }) {
   const [historyFor, setHistoryFor] = useState(null);
   const [historyEvents, setHistoryEvents] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [view, setView] = useState("lista"); // "lista" | "kanban"
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   useEffect(() => { load(); }, [identity]);
 
@@ -176,6 +185,15 @@ export default function BasesView({ identity, onLogout }) {
     setHistoryEvents(data || []);
   }
 
+  function onDropColumn(e, estadoDestino) {
+    e.preventDefault();
+    setDragOverCol(null);
+    const id = e.dataTransfer.getData("text/plain");
+    const c = contacts.find((x) => x.id === id);
+    if (c && columnaDe(c.estado) !== estadoDestino) setEstado(c, estadoDestino);
+    setDraggingId(null);
+  }
+
   const activos = contacts.filter((c) => ACTIVOS.includes(c.estado || "nuevo"));
   const resueltos = contacts.filter((c) => !ACTIVOS.includes(c.estado || "nuevo"));
 
@@ -281,6 +299,58 @@ export default function BasesView({ identity, onLogout }) {
               <p className="text-slate-500 text-xs">Pedile al admin que cargue contactos nuevos, o esperá a que se libere alguno.</p>
             </Card>
           ) : (
+            <>
+              <div className="flex gap-1.5 mb-2.5">
+                <button
+                  onClick={() => setView("lista")}
+                  className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg flex items-center justify-center gap-1 ${view === "lista" ? "bg-indigo-500 text-white" : "bg-white/5 text-slate-500"}`}
+                >
+                  <List size={12} /> Lista
+                </button>
+                <button
+                  onClick={() => setView("kanban")}
+                  className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg flex items-center justify-center gap-1 ${view === "kanban" ? "bg-indigo-500 text-white" : "bg-white/5 text-slate-500"}`}
+                >
+                  <LayoutGrid size={12} /> Kanban
+                </button>
+              </div>
+              {view === "kanban" && (
+                <Card icon={<LayoutGrid size={15} />} title="Kanban" subtitle="Arrastrá una tarjeta a otra columna para cambiarle el estado">
+                  <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+                    {KANBAN_COLUMNS.map((col) => {
+                      const cs = contacts.filter((c) => columnaDe(c.estado) === col.key);
+                      return (
+                        <div
+                          key={col.key}
+                          onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.key); }}
+                          onDragLeave={() => setDragOverCol((k) => (k === col.key ? null : k))}
+                          onDrop={(e) => onDropColumn(e, col.key)}
+                          className={`flex-none w-40 rounded-xl px-1.5 py-2 ring-1 ${dragOverCol === col.key ? "bg-indigo-500/10 ring-indigo-500/40" : "bg-white/[0.02] ring-white/5"}`}
+                        >
+                          <p className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mb-2 ${BADGE_CLASSES[col.color]}`}>{col.label} · {cs.length}</p>
+                          <div className="space-y-1.5 min-h-[3rem]">
+                            {cs.map((c) => (
+                              <div
+                                key={c.id}
+                                draggable
+                                onDragStart={(e) => { e.dataTransfer.setData("text/plain", c.id); e.dataTransfer.effectAllowed = "move"; setDraggingId(c.id); }}
+                                onDragEnd={() => { setDraggingId(null); setDragOverCol(null); }}
+                                className={`bg-white/5 ring-1 ring-white/10 rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing ${draggingId === c.id ? "opacity-40" : ""}`}
+                              >
+                                <p className="font-semibold text-[10px] truncate">{c.nombre}</p>
+                                <p className="text-slate-500 text-[9px] truncate">{c.numero || "sin número"}</p>
+                                {c.estado === "para_retomar" && <p className="text-orange-400 text-[9px] mt-0.5">Para retomar</p>}
+                                {c.pausado && <p className="text-slate-500 text-[9px] mt-0.5">Pausado</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+              {view === "lista" && (
             <Card icon={<Users size={15} />} title="Tus contactos de hoy" subtitle={`${activos.length} pendientes`}>
               <div className="max-h-[32rem] overflow-y-auto mb-3 -mx-1 px-1 space-y-2">
                 {[...activos, ...resueltos].map((c) => {
@@ -406,6 +476,8 @@ export default function BasesView({ identity, onLogout }) {
                 </button>
               </div>
             </Card>
+              )}
+            </>
           )}
         </>
       )}
