@@ -116,6 +116,13 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [opsModal, setOpsModal] = useState(null);
+  const [turnoEmpleadoFiltro, setTurnoEmpleadoFiltro] = useState("");
+  const [publicidadCount, setPublicidadCount] = useState(null);
+
+  useEffect(() => {
+    supabase.rpc("admin_count_publicidad", { input_admin_pin: adminPin, fecha_desde: dateFrom || null, fecha_hasta: dateTo || null })
+      .then(({ data }) => setPublicidadCount(data ?? 0));
+  }, [adminPin, dateFrom, dateTo]);
 
   async function loadArchivados() {
     const { data } = await supabase.from("shifts").select("*").eq("archivado", true).order("updated_at", { ascending: false }).limit(200);
@@ -223,6 +230,10 @@ export default function AdminDashboard({ adminPin, onExit }) {
   }, [shifts, dateFrom, dateTo]);
 
   const computedAll = useMemo(() => shifts.map(computeShift), [shifts]);
+  const turnosFiltrados = useMemo(
+    () => (turnoEmpleadoFiltro ? computedAll.filter((c) => c.shift.responsable === turnoEmpleadoFiltro) : computedAll),
+    [computedAll, turnoEmpleadoFiltro]
+  );
   const computed = useMemo(() => filteredShifts.map(computeShift), [filteredShifts]);
 
   const totals = useMemo(() => {
@@ -556,6 +567,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <StatBox label="Retiros pagados" value={money(totals.retiros)} negative />
             <StatBox label="Bono dado" value={money(totals.bono)} />
             <StatBox label="Neto (ventas − premios)" value={money(totals.neto)} positive={totals.neto >= 0} negative={totals.neto < 0} />
+            <StatBox label="Mensajes de publicidad" value={publicidadCount === null ? "…" : publicidadCount} />
           </div>
           <Card icon={<TrendingUp size={15} className="rotate-180" />} title="Bajadas" subtitle="A dónde fue esa plata — no se resta del Neto">
             <div className="grid grid-cols-3 gap-2 mb-2">
@@ -664,15 +676,23 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
       {tab === "turnos" && (
         <>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold text-sm text-slate-400">Detalle de turnos ({computedAll.length})</h3>
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <h3 className="font-bold text-sm text-slate-400 flex-none">Detalle de turnos ({turnosFiltrados.length})</h3>
             <button
               onClick={() => { if (archivados === null) loadArchivados(); else setArchivados(null); }}
-              className="text-[10px] font-bold text-indigo-300 underline"
+              className="text-[10px] font-bold text-indigo-300 underline flex-none"
             >
               {archivados === null ? "Ver archivados" : "Ocultar archivados"}
             </button>
           </div>
+          <select
+            value={turnoEmpleadoFiltro}
+            onChange={(e) => { setTurnoEmpleadoFiltro(e.target.value); setTurnosVisibles(15); }}
+            className="input !py-1.5 text-xs mb-3 w-full"
+          >
+            <option value="">Todos los empleados</option>
+            {employees.filter((e) => e.activo).map((e) => (<option key={e.id} value={e.nombre}>{e.nombre}</option>))}
+          </select>
           {archivados !== null && (
             <div className="bg-white/[0.02] ring-1 ring-white/5 rounded-2xl p-3 mb-3">
               <p className="text-[10px] text-slate-500 font-semibold mb-2">Archivados ({archivados.length}) — no cuentan en ninguna estadística</p>
@@ -689,7 +709,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               </div>
             </div>
           )}
-          {computedAll.slice(0, turnosVisibles).map((c) => (
+          {turnosFiltrados.slice(0, turnosVisibles).map((c) => (
             <ShiftRow
               key={c.shift.id} c={c} expanded={expanded === c.shift.id}
               onToggle={() => setExpanded(expanded === c.shift.id ? null : c.shift.id)}
@@ -699,12 +719,12 @@ export default function AdminDashboard({ adminPin, onExit }) {
               basesActivity={activityByShift[c.shift.id]}
             />
           ))}
-          {turnosVisibles < computedAll.length && (
+          {turnosVisibles < turnosFiltrados.length && (
             <button
               onClick={() => setTurnosVisibles((n) => n + 15)}
               className="w-full bg-white/5 ring-1 ring-white/10 rounded-xl py-2.5 text-xs font-bold text-slate-400 mt-1"
             >
-              Cargar 15 más ({computedAll.length - turnosVisibles} restantes)
+              Cargar 15 más ({turnosFiltrados.length - turnosVisibles} restantes)
             </button>
           )}
         </>

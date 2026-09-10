@@ -104,7 +104,7 @@ export default function App() {
           </button>
         )}
         {view === "turno" && (identity ? <TurnoForm wallets={wallets} draft={{ ...draft, submitTurno: handleSubmit }} identity={identity} goOps={() => setView("operaciones")} /> : <EmployeePinGate onIdentify={setIdentity} />)}
-        {view === "operaciones" && (identity ? <OperacionesTab draft={draft} /> : <EmployeePinGate onIdentify={setIdentity} />)}
+        {view === "operaciones" && (identity ? <OperacionesTab draft={draft} identity={identity} /> : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "bases" && (identity ? <BasesView identity={identity} onLogout={logout} /> : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "adminGate" && (
           <PinGate
