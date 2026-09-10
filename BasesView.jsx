@@ -196,6 +196,10 @@ export default function BasesView({ identity, onLogout }) {
 
   const activos = contacts.filter((c) => ACTIVOS.includes(c.estado || "nuevo"));
   const resueltos = contacts.filter((c) => !ACTIVOS.includes(c.estado || "nuevo"));
+  // Resumen del día: "ya contactado" es cualquier estado que no sea "nuevo"
+  // (incluye para_retomar — ya se le tocó antes, no es lo mismo que nunca tocado).
+  const contactadosHoy = contacts.filter((c) => (c.estado || "nuevo") !== "nuevo").length;
+  const cargaronHoy = contacts.filter((c) => c.estado === "cargado").length;
 
   if (loading) return <p className="text-slate-500 text-sm text-center mt-16">Cargando tus contactos de hoy...</p>;
 
@@ -287,11 +291,23 @@ export default function BasesView({ identity, onLogout }) {
               </div>
             </Card>
           )}
-          <div className="bg-indigo-500/10 ring-1 ring-indigo-500/30 rounded-xl px-3.5 py-3 mb-4 flex items-center gap-2.5">
-            <Sparkles size={16} className="text-indigo-300 flex-none" />
-            <p className="text-xs text-slate-300">
-              <span className="font-bold text-indigo-300">Hoy te tocan {contacts.length} de {cupo}</span> — {activos.length} pendientes, {resueltos.length} ya resueltos.
-            </p>
+          <div className="bg-indigo-500/10 ring-1 ring-indigo-500/30 rounded-xl px-3.5 py-3 mb-4">
+            <div className="flex items-center gap-2.5 mb-2.5">
+              <Sparkles size={16} className="text-indigo-300 flex-none" />
+              <p className="text-xs text-slate-300">
+                <span className="font-bold text-indigo-300">Hoy te tocan {contacts.length} de {cupo}</span> — {activos.length} pendientes, {resueltos.length} ya resueltos.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-black/20 rounded-lg px-3 py-2 text-center">
+                <p className="text-lg font-black text-indigo-300">{contactadosHoy}/{cupo}</p>
+                <p className="text-[9px] text-slate-500 uppercase">Contactó</p>
+              </div>
+              <div className="bg-black/20 rounded-lg px-3 py-2 text-center">
+                <p className="text-lg font-black text-emerald-400">{cargaronHoy}/{contactadosHoy}</p>
+                <p className="text-[9px] text-slate-500 uppercase">Cargó</p>
+              </div>
+            </div>
           </div>
 
           {contacts.length === 0 ? (
