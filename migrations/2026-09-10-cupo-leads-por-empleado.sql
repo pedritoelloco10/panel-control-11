@@ -206,3 +206,16 @@ begin
   return true;
 end;
 $function$;
+
+-- ---------- Admin: listar empleados, ahora con cupo_leads (mismo caso que session_employee) ----------
+drop function if exists admin_list_employees(text);
+create or replace function admin_list_employees(input_admin_pin text)
+returns table(id uuid, nombre text, pin text, activo boolean, recibe_leads boolean, cupo_leads int)
+language sql
+security definer
+set search_path to 'public'
+as $function$
+  select e.id, e.nombre, e.pin, e.activo, e.recibe_leads, e.cupo_leads from employees e
+  where verify_admin_pin(input_admin_pin) = true
+  order by e.created_at;
+$function$;
