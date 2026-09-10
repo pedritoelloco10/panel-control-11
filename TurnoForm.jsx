@@ -1,36 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock, WifiOff, AlertTriangle, Megaphone } from "lucide-react";
+import React from "react";
+import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock, WifiOff, AlertTriangle } from "lucide-react";
 import { Card, Field, Badge } from "./ui";
 import { PLATFORMS, num, money, classifyTurno, uid } from "./lib";
-import { supabase } from "./supabaseClient";
 
 export default function TurnoForm({ wallets, draft, identity, goOps }) {
   const { meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf,
     bajadas, setBajadas, movs, setMovs, notas, setNotas,
     expected, cierreCheck, saving, error, saved, autosaveError, submitTurno, opsFilledCount, carriedFrom, otherOpenBy, refuerzoPropioAbierto, loadError } = draft;
-
-  const [pubHoy, setPubHoy] = useState(null);
-  const [pubLoading, setPubLoading] = useState(false);
-  const [pubError, setPubError] = useState(false);
-
-  useEffect(() => {
-    if (!identity?.token) return;
-    supabase.rpc("session_count_publicidad_hoy", { input_token: identity.token }).then(({ data }) => setPubHoy(data ?? 0));
-  }, [identity?.token]);
-
-  async function addPublicidad() {
-    if (pubLoading) return;
-    setPubLoading(true);
-    setPubError(false);
-    const { data: ok, error: pubErr } = await supabase.rpc("session_add_publicidad_evento", { input_token: identity.token });
-    if (pubErr || ok === false) {
-      setPubError(true);
-    } else {
-      setPubHoy((n) => (n ?? 0) + 1);
-    }
-    setTimeout(() => setPubLoading(false), 500);
-  }
 
   if (loadError) {
     return (
@@ -103,21 +80,6 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
         </div>
         <p className="text-[10px] text-slate-600 mt-2">Franja detectada: {classifyTurno(meta.horaInicio)}</p>
       </Card>
-
-      <button
-        onClick={addPublicidad} disabled={pubLoading}
-        className="w-full bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-4 mb-3 flex items-center justify-between disabled:opacity-60"
-      >
-        <div className="flex items-center gap-2.5">
-          <span className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-amber-300"><Megaphone size={15} /></span>
-          <div className="text-left">
-            <p className="font-bold text-sm">+1 mensaje de publicidad</p>
-            <p className="text-slate-500 text-[11px]">
-              {pubError ? "No se pudo sumar — probá de nuevo" : pubHoy === null ? "Cargando..." : `Hoy: ${pubHoy} mensaje${pubHoy !== 1 ? "s" : ""}`}
-            </p>
-          </div>
-        </div>
-      </button>
 
       <Card icon={<Wallet size={15} />} title="Billeteras — inicio" subtitle={carriedFrom ? `Arrastrado del cierre de ${carriedFrom.responsable} · ${carriedFrom.fecha} ${carriedFrom.hora}` : "Primer turno cargado — sin cierre anterior"}>
         <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto -mx-1 px-1">
