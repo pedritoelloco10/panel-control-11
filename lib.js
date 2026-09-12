@@ -43,9 +43,12 @@ export function num(v) {
   return isNaN(n) ? 0 : n;
 }
 export function formatMiles(v) {
-  const digits = String(v ?? "").replace(/\D/g, "");
+  const str = String(v ?? "");
+  const neg = str.trim().startsWith("-");
+  const digits = str.replace(/\D/g, "");
   if (!digits) return "";
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return neg ? "-" + formatted : formatted;
 }
 export function money(n) {
   const sign = n < 0 ? "-" : "";

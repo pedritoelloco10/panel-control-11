@@ -96,6 +96,10 @@ export default function AdminDashboard({ adminPin, onExit }) {
   // cada turno puntual — a diferencia de activityByEmpDate (por día completo),
   // esto separa a un mismo empleado si abrió más de un turno el mismo día.
   const [activityByShift, setActivityByShift] = useState({});
+  // Mensajes de publicidad recortados a la ventana exacta de cada turno puntual
+  // (mismo patrón que activityByShift) — para mostrar el total de ese turno,
+  // no solo del día.
+  const [publicidadByShift, setPublicidadByShift] = useState({});
   const [reactivables, setReactivables] = useState([]);
   const [allContactsFlat, setAllContactsFlat] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
@@ -117,7 +121,19 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [opsModal, setOpsModal] = useState(null);
   const [turnoEmpleadoFiltro, setTurnoEmpleadoFiltro] = useState("");
+  const [turnoRangeKey, setTurnoRangeKey] = useState("todo");
+  const [turnoDateFrom, setTurnoDateFrom] = useState("");
+  const [turnoDateTo, setTurnoDateTo] = useState("");
   const [publicidadCount, setPublicidadCount] = useState(null);
+
+  function applyPresetTurno(key) {
+    setTurnoRangeKey(key);
+    const today = todayStr();
+    if (key === "hoy") { setTurnoDateFrom(today); setTurnoDateTo(today); }
+    else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setTurnoDateFrom(d.toISOString().slice(0, 10)); setTurnoDateTo(today); }
+    else if (key === "mes") { const d = new Date(); d.setDate(1); setTurnoDateFrom(d.toISOString().slice(0, 10)); setTurnoDateTo(today); }
+    else if (key === "todo") { setTurnoDateFrom(""); setTurnoDateTo(""); }
+  }
 
   useEffect(() => {
     supabase.rpc("admin_count_publicidad", { input_admin_pin: adminPin, fecha_desde: dateFrom || null, fecha_hasta: dateTo || null })
@@ -190,6 +206,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
     (activityShift || []).forEach((a) => { shiftMap[a.shift_id] = a; });
     setActivityByShift(shiftMap);
 
+    const { data: publicidadShift } = await supabase.rpc("admin_publicidad_por_turno", { input_admin_pin: adminPin });
+    const pubMap = {};
+    (publicidadShift || []).forEach((p) => { pubMap[p.shift_id] = p.cantidad; });
+    setPublicidadByShift(pubMap);
+
     const { data: sessions } = await supabase.rpc("admin_active_sessions", { input_admin_pin: adminPin });
     setActiveSessions(sessions || []);
     const { data: refs } = await supabase.rpc("admin_list_refuerzos", { input_admin_pin: adminPin });
@@ -231,14 +252,18 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
   const computedAll = useMemo(() => shifts.map(computeShift), [shifts]);
   const turnosFiltrados = useMemo(
-    () => (turnoEmpleadoFiltro ? computedAll.filter((c) => c.shift.responsable === turnoEmpleadoFiltro) : computedAll),
-    [computedAll, turnoEmpleadoFiltro]
+    () => computedAll.filter((c) =>
+      (!turnoEmpleadoFiltro || c.shift.responsable === turnoEmpleadoFiltro) &&
+      (!turnoDateFrom || c.shift.fecha >= turnoDateFrom) &&
+      (!turnoDateTo || c.shift.fecha <= turnoDateTo)
+    ),
+    [computedAll, turnoEmpleadoFiltro, turnoDateFrom, turnoDateTo]
   );
   const computed = useMemo(() => filteredShifts.map(computeShift), [filteredShifts]);
 
   const totals = useMemo(() => {
-    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0 };
-    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; });
+    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0, cargasLista: 0 };
+    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; t.cargasLista += c.cargasLista; });
     return t;
   }, [computed]);
 
@@ -568,6 +593,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <StatBox label="Bono dado" value={money(totals.bono)} />
             <StatBox label="Neto (ventas − premios)" value={money(totals.neto)} positive={totals.neto >= 0} negative={totals.neto < 0} />
             <StatBox label="Mensajes de publicidad" value={publicidadCount === null ? "…" : publicidadCount} />
+            <StatBox label="Origen Nuevo (publicidad)" value={totals.nuevos} />
+            <StatBox label="Origen Derivado" value={totals.derivados} />
+            <StatBox label="Origen Lista (Bases)" value={totals.cargasLista} />
           </div>
           <Card icon={<TrendingUp size={15} className="rotate-180" />} title="Bajadas" subtitle="A dónde fue esa plata — no se resta del Neto">
             <div className="grid grid-cols-3 gap-2 mb-2">
@@ -693,6 +721,12 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <option value="">Todos los empleados</option>
             {employees.filter((e) => e.activo).map((e) => (<option key={e.id} value={e.nombre}>{e.nombre}</option>))}
           </select>
+          <DateRangeFilter
+            rangeKey={turnoRangeKey} dateFrom={turnoDateFrom} dateTo={turnoDateTo}
+            onPreset={(k) => { applyPresetTurno(k); setTurnosVisibles(15); }}
+            onFrom={(v) => { setTurnoRangeKey("custom"); setTurnoDateFrom(v); setTurnosVisibles(15); }}
+            onTo={(v) => { setTurnoRangeKey("custom"); setTurnoDateTo(v); setTurnosVisibles(15); }}
+          />
           {archivados !== null && (
             <div className="bg-white/[0.02] ring-1 ring-white/5 rounded-2xl p-3 mb-3">
               <p className="text-[10px] text-slate-500 font-semibold mb-2">Archivados ({archivados.length}) — no cuentan en ninguna estadística</p>
@@ -717,6 +751,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               onOpenOps={setOpsModal}
               adminPin={adminPin} onChange={loadAll}
               basesActivity={activityByShift[c.shift.id]}
+              publicidad={publicidadByShift[c.shift.id]}
             />
           ))}
           {turnosVisibles < turnosFiltrados.length && (
@@ -947,7 +982,7 @@ function PlataformaBreakdown({ porPlataforma }) {
   );
 }
 
-function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChange, basesActivity }) {
+function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChange, basesActivity, publicidad }) {
   const s = c.shift;
   const ok = !c.hasError;
   return (
@@ -979,6 +1014,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
         <div className="px-3.5 pb-4 pt-1 border-t border-white/5 text-xs space-y-3">
           <PlataformaBreakdown porPlataforma={c.porPlataforma} />
           <p className="text-slate-400">Nuevos: {c.nuevos} · Derivados: {c.derivados} · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
+          <p className="text-slate-400">Mensajes de publicidad este turno: {publicidad ?? 0}</p>
           <div>
             <p className="text-slate-500 mb-1 font-semibold">
               Billeteras — inicio → cierre · total al cierre <span className="text-slate-200">{money(c.billCierreTotal)}</span>
