@@ -1,7 +1,7 @@
 import React from "react";
 import { Users, Wallet, Coins, ListChecks, ChevronRight, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock, WifiOff, AlertTriangle } from "lucide-react";
 import { Card, Field, Badge } from "./ui";
-import { PLATFORMS, num, money, classifyTurno, uid } from "./lib";
+import { PLATFORMS, num, money, classifyTurno, uid, formatMiles } from "./lib";
 
 export default function TurnoForm({ wallets, draft, identity, goOps }) {
   const { meta, setMeta, billInicio, billCierre, setBillCierre,
@@ -249,7 +249,7 @@ function ListEditor({ items, setItems, addLabel, fields, wallets }) {
                 {(f.key === "billetera" && wallets ? wallets : f.options).map((o) => (<option key={o}>{o}</option>))}
               </select>
             ) : (
-              <input key={f.key} inputMode={f.numeric ? "numeric" : "text"} placeholder={f.placeholder} value={it[f.key]} onChange={(e) => update(it.id, f.key, e.target.value)} className="input !py-1.5 text-xs" />
+              <input key={f.key} inputMode={f.numeric ? "numeric" : "text"} placeholder={f.placeholder} value={it[f.key]} onChange={(e) => update(it.id, f.key, f.numeric ? formatMiles(e.target.value) : e.target.value)} className="input !py-1.5 text-xs" />
             )
           )}
           <button onClick={() => setItems(items.filter((x) => x.id !== it.id))} className="text-slate-600 hover:text-rose-400">

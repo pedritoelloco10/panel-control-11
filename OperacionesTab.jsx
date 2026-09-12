@@ -29,6 +29,20 @@ export default function OperacionesTab({ draft, identity }) {
     setTimeout(() => setPubLoading(false), 500);
   }
 
+  async function removePublicidad() {
+    if (pubLoading) return;
+    setPubLoading(true);
+    setPubError(false);
+    const { data: ok, error: pubErr } = await supabase.rpc("session_remove_publicidad_evento", { input_token: identity.token });
+    if (pubErr) {
+      setPubError(true);
+    } else if (ok) {
+      // ok === false: no había ningún mensaje propio para borrar — no hacer nada, no es un error.
+      setPubHoy((n) => Math.max(0, (n ?? 0) - 1));
+    }
+    setTimeout(() => setPubLoading(false), 500);
+  }
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("clientes").select("identificador").order("created_at", { ascending: false }).limit(500);
@@ -101,18 +115,21 @@ export default function OperacionesTab({ draft, identity }) {
         Atajos: <b className="text-slate-400">B/G</b> plataforma · <b className="text-slate-400">C/R</b> carga o retiro · <b className="text-slate-400">← →</b> monto/bono/cliente · <b className="text-slate-400">↑ ↓ Enter</b> cambiar de fila
       </p>
 
-      <button
-        onClick={addPublicidad} disabled={pubLoading}
-        className="w-full bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-3 mb-2.5 flex items-center justify-between disabled:opacity-60"
-      >
-        <div className="flex items-center gap-2.5">
-          <span className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-amber-300"><Megaphone size={15} /></span>
-          <p className="font-bold text-sm">+1 mensaje de publicidad</p>
+      <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-3 mb-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-amber-300 flex-none"><Megaphone size={15} /></span>
+          <div className="min-w-0">
+            <p className="font-bold text-sm">Mensajes de publicidad</p>
+            <p className="text-slate-500 text-[11px] truncate">
+              {pubError ? "No se pudo actualizar — probá de nuevo" : pubHoy === null ? "Cargando..." : `Hoy: ${pubHoy} mensaje${pubHoy !== 1 ? "s" : ""}`}
+            </p>
+          </div>
         </div>
-        <p className="text-slate-500 text-[11px]">
-          {pubError ? "No se pudo sumar — probá de nuevo" : pubHoy === null ? "Cargando..." : `Hoy: ${pubHoy} mensaje${pubHoy !== 1 ? "s" : ""}`}
-        </p>
-      </button>
+        <div className="flex items-center gap-1.5 flex-none">
+          <button onClick={removePublicidad} disabled={pubLoading} className="w-8 h-8 rounded-lg bg-white/5 text-slate-300 disabled:opacity-60 font-bold text-base flex items-center justify-center">−</button>
+          <button onClick={addPublicidad} disabled={pubLoading} className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 disabled:opacity-60 font-bold text-base flex items-center justify-center">+</button>
+        </div>
+      </div>
 
       <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-2.5 mb-2.5 sticky top-16 z-10 backdrop-blur">
         <div className="grid grid-cols-2 gap-2">
