@@ -183,7 +183,7 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
         />
       </div>
       <div className="flex gap-0.5">
-        {[["nuevo", "N"], ["derivado", "D"], ["lista", "L"]].map(([v, l]) => (
+        {[["nuevo", "P"], ["derivado", "R"], ["lista", "L"]].map(([v, l]) => (
           <button key={v} onClick={() => onUpdate({ origen: o.origen === v ? null : v })} className={`w-6 h-6 rounded text-[9px] font-black ${o.origen === v ? "bg-emerald-500 text-white" : "bg-white/5 text-slate-500"}`}>{l}</button>
         ))}
       </div>

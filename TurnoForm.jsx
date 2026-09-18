@@ -199,7 +199,7 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
               <input
                 inputMode="numeric" value={billCierre[w] || ""}
                 data-cierre-idx={i}
-                onChange={(e) => setBillCierre({ ...billCierre, [w]: e.target.value.replace(/[^\d]/g, "") })}
+                onChange={(e) => setBillCierre({ ...billCierre, [w]: formatMiles(e.target.value) })}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === "ArrowDown") {
                     e.preventDefault();
