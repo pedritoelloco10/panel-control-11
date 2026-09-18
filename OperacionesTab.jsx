@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Lock, WifiOff, AlertTriangle, Megaphone } from "lucide-react";
+import { X, Lock, WifiOff, AlertTriangle } from "lucide-react";
 import { Card } from "./ui";
 import { PLATFORMS, num, money, formatMiles, blankOp, seedOps, GROW_BATCH } from "./lib";
 import { supabase } from "./supabaseClient";
@@ -7,41 +7,6 @@ import { supabase } from "./supabaseClient";
 export default function OperacionesTab({ draft, identity }) {
   const { ops, setOps, expected, otherOpenBy, autosaveError, loadError } = draft;
   const [clientesConocidos, setClientesConocidos] = useState([]);
-  const [pubHoy, setPubHoy] = useState(null);
-  const [pubLoading, setPubLoading] = useState(false);
-  const [pubError, setPubError] = useState(false);
-
-  useEffect(() => {
-    if (!identity?.token) return;
-    supabase.rpc("session_count_publicidad_hoy", { input_token: identity.token }).then(({ data }) => setPubHoy(data ?? 0));
-  }, [identity?.token]);
-
-  async function addPublicidad() {
-    if (pubLoading) return;
-    setPubLoading(true);
-    setPubError(false);
-    const { data: ok, error: pubErr } = await supabase.rpc("session_add_publicidad_evento", { input_token: identity.token });
-    if (pubErr || ok === false) {
-      setPubError(true);
-    } else {
-      setPubHoy((n) => (n ?? 0) + 1);
-    }
-    setTimeout(() => setPubLoading(false), 500);
-  }
-
-  async function removePublicidad() {
-    if (pubLoading) return;
-    setPubLoading(true);
-    setPubError(false);
-    const { data: ok, error: pubErr } = await supabase.rpc("session_remove_publicidad_evento", { input_token: identity.token });
-    if (pubErr) {
-      setPubError(true);
-    } else if (ok) {
-      // ok === false: no había ningún mensaje propio para borrar — no hacer nada, no es un error.
-      setPubHoy((n) => Math.max(0, (n ?? 0) - 1));
-    }
-    setTimeout(() => setPubLoading(false), 500);
-  }
 
   useEffect(() => {
     (async () => {
@@ -114,22 +79,6 @@ export default function OperacionesTab({ draft, identity }) {
       <p className="text-[10px] text-slate-600 mb-2.5">
         Atajos: <b className="text-slate-400">B/G</b> plataforma · <b className="text-slate-400">C/R</b> carga o retiro · <b className="text-slate-400">← →</b> monto/bono/cliente · <b className="text-slate-400">↑ ↓ Enter</b> cambiar de fila
       </p>
-
-      <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-3 mb-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-amber-300 flex-none"><Megaphone size={15} /></span>
-          <div className="min-w-0">
-            <p className="font-bold text-sm">Mensajes de publicidad</p>
-            <p className="text-slate-500 text-[11px] truncate">
-              {pubError ? "No se pudo actualizar — probá de nuevo" : pubHoy === null ? "Cargando..." : `Hoy: ${pubHoy} mensaje${pubHoy !== 1 ? "s" : ""}`}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 flex-none">
-          <button onClick={removePublicidad} disabled={pubLoading} className="w-8 h-8 rounded-lg bg-white/5 text-slate-300 disabled:opacity-60 font-bold text-base flex items-center justify-center">−</button>
-          <button onClick={addPublicidad} disabled={pubLoading} className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 disabled:opacity-60 font-bold text-base flex items-center justify-center">+</button>
-        </div>
-      </div>
 
       <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-2.5 mb-2.5 sticky top-16 z-10 backdrop-blur">
         <div className="grid grid-cols-2 gap-2">
