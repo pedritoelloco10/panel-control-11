@@ -269,7 +269,7 @@ export function useTurnoDraft(identity) {
     // pasaba el chequeo de "completo" y después se convertía en 0 en silencio al
     // calcularse los totales — un cierre que parecía completo pero en realidad
     // arrastraba un cero disfrazado al turno siguiente.
-    const esNumero = (v) => typeof v === "string" && /^\d+$/.test(v);
+    const esNumero = (v) => typeof v === "string" && /^\d+$/.test(v.replace(/\./g, ""));
     const walletNames = (currentWallets || []).map((w) => w.nombre);
     const billCierreCompleto = walletNames.length === 0 || walletNames.every((nombre) => esNumero(billCierre[nombre]));
     const stockCierreCompleto = esNumero(stockCierreInf.B) && esNumero(stockCierreInf.G);
