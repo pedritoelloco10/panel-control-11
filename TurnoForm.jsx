@@ -141,7 +141,7 @@ export default function TurnoForm({ wallets, draft, identity, goOps }) {
         </div>
       </Card>
 
-      <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-3 mb-2.5 flex items-center justify-between">
+      <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-3 mb-2.5 flex items-center justify-between sticky top-16 z-10 backdrop-blur">
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-amber-300 flex-none"><Megaphone size={15} /></span>
           <div className="min-w-0">
