@@ -20,15 +20,15 @@ const CSV_HEADERS = [
 
 function computeShift(shift) {
   let ventasTotal = 0, retirosTotal = 0;
-  let nuevos = 0, derivados = 0, cargasLista = 0, montoLista = 0, cargasCount = 0, retirosCount = 0;
+  let nuevos = 0, derivados = 0, cargasLista = 0, montoNuevos = 0, montoDerivados = 0, montoLista = 0, cargasCount = 0, retirosCount = 0;
   const porPlataforma = { B: { ventas: 0, premios: 0, bono: 0 }, G: { ventas: 0, premios: 0, bono: 0 } };
   (shift.ops || []).forEach((o) => {
     const m = num(o.monto);
     if (o.tipo === "carga") {
       ventasTotal += m; cargasCount++;
       if (porPlataforma[o.plataforma]) { porPlataforma[o.plataforma].ventas += m; porPlataforma[o.plataforma].bono += num(o.bono); }
-      if (o.origen === "nuevo") nuevos++;
-      if (o.origen === "derivado") derivados++;
+      if (o.origen === "nuevo") { nuevos++; montoNuevos += m; }
+      if (o.origen === "derivado") { derivados++; montoDerivados += m; }
       if (o.origen === "lista") { cargasLista++; montoLista += m; }
     } else {
       retirosTotal += m; retirosCount++;
@@ -73,7 +73,7 @@ function computeShift(shift) {
   return {
     shift, ventasTotal, retirosTotal, bajadasTotal, bajadasFichas, bajadasEfectivo, bajadasGasto, gastosDetalle, netoCaja, bonoTotal, diffEfectivo, diffFichas, hasError, hasErrorRaw, efectivoErrorRaw, fichasErrorRaw,
     billInicioTotal, billCierreTotal,
-    nuevos, derivados, cargasLista, montoLista, cargasCount, retirosCount, movimientosCount,
+    nuevos, derivados, cargasLista, montoNuevos, montoDerivados, montoLista, cargasCount, retirosCount, movimientosCount,
     opsCount: (shift.ops || []).length, porPlataforma,
   };
 }
@@ -262,8 +262,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const computed = useMemo(() => filteredShifts.map(computeShift), [filteredShifts]);
 
   const totals = useMemo(() => {
-    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0, cargasLista: 0 };
-    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; t.cargasLista += c.cargasLista; });
+    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0, cargasLista: 0, montoNuevos: 0, montoDerivados: 0, montoLista: 0 };
+    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; t.cargasLista += c.cargasLista; t.montoNuevos += c.montoNuevos; t.montoDerivados += c.montoDerivados; t.montoLista += c.montoLista; });
     return t;
   }, [computed]);
 
@@ -593,9 +593,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <StatBox label="Bono dado" value={money(totals.bono)} />
             <StatBox label="Neto (ventas − premios)" value={money(totals.neto)} positive={totals.neto >= 0} negative={totals.neto < 0} />
             <StatBox label="Mensajes de publicidad" value={publicidadCount === null ? "…" : publicidadCount} />
-            <StatBox label="Origen Nuevo (publicidad)" value={totals.nuevos} />
-            <StatBox label="Origen Derivado" value={totals.derivados} />
-            <StatBox label="Origen Lista (Bases)" value={totals.cargasLista} />
+            <StatBox label="Origen Nuevo (publicidad)" value={totals.nuevos} sub={`Total ${money(totals.montoNuevos)}`} />
+            <StatBox label="Origen Derivado" value={totals.derivados} sub={`Total ${money(totals.montoDerivados)}`} />
+            <StatBox label="Origen Lista (Bases)" value={totals.cargasLista} sub={`Total ${money(totals.montoLista)}`} />
           </div>
           <Card icon={<TrendingUp size={15} className="rotate-180" />} title="Bajadas" subtitle="A dónde fue esa plata — no se resta del Neto">
             <div className="grid grid-cols-3 gap-2 mb-2">
@@ -1013,7 +1013,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
       {expanded && (
         <div className="px-3.5 pb-4 pt-1 border-t border-white/5 text-xs space-y-3">
           <PlataformaBreakdown porPlataforma={c.porPlataforma} />
-          <p className="text-slate-400">Nuevos: {c.nuevos} · Derivados: {c.derivados} · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
+          <p className="text-slate-400">Nuevos: {c.nuevos} ({money(c.montoNuevos)}) · Derivados: {c.derivados} ({money(c.montoDerivados)}) · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
           <p className="text-slate-400">Mensajes de publicidad este turno: {publicidad ?? 0}</p>
           <div>
             <p className="text-slate-500 mb-1 font-semibold">
