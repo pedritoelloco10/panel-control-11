@@ -594,7 +594,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <StatBox label="Neto (ventas − premios)" value={money(totals.neto)} positive={totals.neto >= 0} negative={totals.neto < 0} />
             <StatBox label="Mensajes de publicidad" value={publicidadCount === null ? "…" : publicidadCount} />
             <StatBox label="Origen Nuevo (publicidad)" value={totals.nuevos} sub={`Total ${money(totals.montoNuevos)}`} />
-            <StatBox label="Origen Derivado" value={totals.derivados} sub={`Total ${money(totals.montoDerivados)}`} />
+            <StatBox label="Origen Referido" value={totals.derivados} sub={`Total ${money(totals.montoDerivados)}`} />
             <StatBox label="Origen Lista (Bases)" value={totals.cargasLista} sub={`Total ${money(totals.montoLista)}`} />
           </div>
           <Card icon={<TrendingUp size={15} className="rotate-180" />} title="Bajadas" subtitle="A dónde fue esa plata — no se resta del Neto">
@@ -669,7 +669,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
                     ))}
                   </tbody>
                 </table>
-                <p className="text-[9px] text-slate-600 mt-2">N = cliente nuevo/publicidad · L = de lista · R = derivado/referido. Estas 3 columnas cuentan operaciones de carga, no contactos de bases.</p>
+                <p className="text-[9px] text-slate-600 mt-2">N = cliente nuevo/publicidad · L = de lista · R = referido. Estas 3 columnas cuentan operaciones de carga, no contactos de bases.</p>
               </div>
             )}
           </Card>
@@ -1013,7 +1013,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
       {expanded && (
         <div className="px-3.5 pb-4 pt-1 border-t border-white/5 text-xs space-y-3">
           <PlataformaBreakdown porPlataforma={c.porPlataforma} />
-          <p className="text-slate-400">Nuevos: {c.nuevos} ({money(c.montoNuevos)}) · Derivados: {c.derivados} ({money(c.montoDerivados)}) · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
+          <p className="text-slate-400">Nuevos: {c.nuevos} ({money(c.montoNuevos)}) · Referidos: {c.derivados} ({money(c.montoDerivados)}) · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
           <p className="text-slate-400">Mensajes de publicidad este turno: {publicidad ?? 0}</p>
           <div>
             <p className="text-slate-500 mb-1 font-semibold">
