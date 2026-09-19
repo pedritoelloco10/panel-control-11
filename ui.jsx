@@ -46,11 +46,12 @@ export function Badge({ ok, textBad, children }) {
   );
 }
 
-export function StatBox({ label, value, positive, negative }) {
+export function StatBox({ label, value, positive, negative, sub }) {
   return (
     <div className="bg-white/[0.03] ring-1 ring-white/5 rounded-2xl p-3">
       <p className="text-[10px] text-slate-500 mb-1">{label}</p>
       <p className={`font-black text-lg ${negative ? "text-rose-400" : positive ? "text-emerald-400" : "text-slate-100"}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>}
     </div>
   );
 }
