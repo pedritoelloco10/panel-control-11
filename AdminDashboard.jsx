@@ -273,12 +273,18 @@ export default function AdminDashboard({ adminPin, onExit }) {
     return t;
   }, [computed]);
 
-  const gastosList = useMemo(() => {
-    const list = [];
+  const bajadasDetalle = useMemo(() => {
+    const efectivo = [], fichas = [], gastos = [];
     computed.forEach((c) => {
-      c.gastosDetalle.forEach((g) => list.push({ fecha: c.shift.fecha, responsable: c.shift.responsable, nota: g.nota, monto: num(g.monto) }));
+      (c.shift.bajadas || []).forEach((b) => {
+        const item = { fecha: c.shift.fecha, responsable: c.shift.responsable, billetera: b.billetera, nota: b.nota, monto: num(b.monto) };
+        if (b.destino === "Compra de fichas") fichas.push(item);
+        else if (b.destino === "Gasto de oficina") gastos.push(item);
+        else efectivo.push(item);
+      });
     });
-    return list.sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+    const porFecha = (a, b) => (a.fecha < b.fecha ? 1 : -1);
+    return { efectivo: efectivo.sort(porFecha), fichas: fichas.sort(porFecha), gastos: gastos.sort(porFecha) };
   }, [computed]);
 
   const byEmployee = useMemo(() => {
@@ -612,19 +618,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
                 <p className="text-sm font-black text-amber-400">{money(totals.bajadasGasto)}</p>
               </div>
             </div>
-            {gastosList.length > 0 && (
-              <div>
-                <p className="text-[10px] text-slate-500 font-semibold mb-1">Detalle de gastos ({gastosList.length})</p>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {gastosList.map((g, i) => (
-                    <div key={i} className="flex justify-between bg-black/20 rounded-lg px-2.5 py-1.5 text-[11px]">
-                      <span className="text-slate-400">{g.fecha} · {g.responsable} · {g.nota || "sin detalle"}</span>
-                      <span className="font-bold text-amber-400">{money(g.monto)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <BajadaLista titulo="Detalle de efectivo" items={bajadasDetalle.efectivo} colorClass="text-slate-200" />
+            <BajadaLista titulo="Detalle de fichas" items={bajadasDetalle.fichas} colorClass="text-indigo-300" />
+            <BajadaLista titulo="Detalle de gastos" items={bajadasDetalle.gastos} colorClass="text-amber-400" />
           </Card>
           <Card icon={<TrendingUp size={15} />} title="Neto y bono por plataforma">
             <PlataformaBreakdown porPlataforma={totalsPorPlataforma} />
@@ -958,6 +954,23 @@ function OpsTable({ ops }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function BajadaLista({ titulo, items, colorClass }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-3 first:mt-0">
+      <p className="text-[10px] text-slate-500 font-semibold mb-1">{titulo} ({items.length})</p>
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {items.map((it, i) => (
+          <div key={i} className="flex justify-between bg-black/20 rounded-lg px-2.5 py-1.5 text-[11px]">
+            <span className="text-slate-400">{it.fecha} · {it.responsable} · {it.billetera || "sin billetera"} · {it.nota || "sin nota"}</span>
+            <span className={`font-bold ${colorClass}`}>{money(it.monto)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
