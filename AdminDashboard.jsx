@@ -78,6 +78,12 @@ function computeShift(shift) {
   };
 }
 
+function sumTotals(computedList) {
+  const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0, cargasLista: 0, montoNuevos: 0, montoDerivados: 0, montoLista: 0, cargasCount: 0, retirosCount: 0 };
+  computedList.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; t.cargasLista += c.cargasLista; t.montoNuevos += c.montoNuevos; t.montoDerivados += c.montoDerivados; t.montoLista += c.montoLista; t.cargasCount += c.cargasCount; t.retirosCount += c.retirosCount; });
+  return t;
+}
+
 export default function AdminDashboard({ adminPin, onExit }) {
   const [tab, setTab] = useState("resumen");
   const [shifts, setShifts] = useState([]);
@@ -261,11 +267,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
   );
   const computed = useMemo(() => filteredShifts.map(computeShift), [filteredShifts]);
 
-  const totals = useMemo(() => {
-    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0, cargasLista: 0, montoNuevos: 0, montoDerivados: 0, montoLista: 0, cargasCount: 0, retirosCount: 0 };
-    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; t.cargasLista += c.cargasLista; t.montoNuevos += c.montoNuevos; t.montoDerivados += c.montoDerivados; t.montoLista += c.montoLista; t.cargasCount += c.cargasCount; t.retirosCount += c.retirosCount; });
-    return t;
-  }, [computed]);
+  const totals = useMemo(() => sumTotals(computed), [computed]);
 
   const totalsPorPlataforma = useMemo(() => {
     const t = { B: { ventas: 0, premios: 0, bono: 0 }, G: { ventas: 0, premios: 0, bono: 0 } };
@@ -396,6 +398,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
     { key: "resumen", label: "Resumen", icon: <BarChart3 size={12} /> },
     { key: "turnos", label: "Turnos", icon: <TrendingUp size={12} /> },
     { key: "analisis", label: "Análisis", icon: <TrendingUp size={12} /> },
+    { key: "comparativa", label: "Comparativa", icon: <TrendingUp size={12} /> },
     { key: "bases", label: "Bases", icon: <Database size={12} /> },
     { key: "clientes", label: "Clientes", icon: <Users size={12} /> },
     { key: "empleados", label: "Empleados", icon: <Users size={12} /> },
@@ -700,6 +703,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
         </>
       )}
 
+      {tab === "comparativa" && <ComparativaTab computedAll={computedAll} adminPin={adminPin} />}
+
       {tab === "turnos" && (
         <>
           <div className="flex items-center justify-between mb-2 gap-2">
@@ -853,6 +858,118 @@ function DateRangeFilter({ rangeKey, dateFrom, dateTo, onPreset, onFrom, onTo })
         <input type="date" value={dateTo} onChange={(e) => onTo(e.target.value)} className="input !py-1.5 text-[11px] flex-1" />
       </div>
     </div>
+  );
+}
+
+function applyPresetRango(key, setFrom, setTo) {
+  const today = todayStr();
+  if (key === "hoy") { setFrom(today); setTo(today); }
+  else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setFrom(d.toISOString().slice(0, 10)); setTo(today); }
+  else if (key === "mes") { const d = new Date(); d.setDate(1); setFrom(d.toISOString().slice(0, 10)); setTo(today); }
+  else if (key === "todo") { setFrom(""); setTo(""); }
+}
+
+function ComparativaTab({ computedAll, adminPin }) {
+  const [rangeKeyA, setRangeKeyA] = useState("todo");
+  const [dateFromA, setDateFromA] = useState("");
+  const [dateToA, setDateToA] = useState("");
+  const [rangeKeyB, setRangeKeyB] = useState("todo");
+  const [dateFromB, setDateFromB] = useState("");
+  const [dateToB, setDateToB] = useState("");
+  const [pubA, setPubA] = useState(null);
+  const [pubB, setPubB] = useState(null);
+
+  useEffect(() => {
+    supabase.rpc("admin_count_publicidad", { input_admin_pin: adminPin, fecha_desde: dateFromA || null, fecha_hasta: dateToA || null }).then(({ data }) => setPubA(data ?? 0));
+  }, [adminPin, dateFromA, dateToA]);
+  useEffect(() => {
+    supabase.rpc("admin_count_publicidad", { input_admin_pin: adminPin, fecha_desde: dateFromB || null, fecha_hasta: dateToB || null }).then(({ data }) => setPubB(data ?? 0));
+  }, [adminPin, dateFromB, dateToB]);
+
+  const computedA = useMemo(
+    () => computedAll.filter((c) => (!dateFromA || c.shift.fecha >= dateFromA) && (!dateToA || c.shift.fecha <= dateToA)),
+    [computedAll, dateFromA, dateToA]
+  );
+  const computedB = useMemo(
+    () => computedAll.filter((c) => (!dateFromB || c.shift.fecha >= dateFromB) && (!dateToB || c.shift.fecha <= dateToB)),
+    [computedAll, dateFromB, dateToB]
+  );
+  const totalsA = useMemo(() => sumTotals(computedA), [computedA]);
+  const totalsB = useMemo(() => sumTotals(computedB), [computedB]);
+
+  const identidad = (v) => v;
+  const rows = [
+    { label: "Turnos", a: computedA.length, b: computedB.length, format: identidad },
+    { label: "Ventas totales", a: totalsA.ventas, b: totalsB.ventas, format: money },
+    { label: "Retiros pagados", a: totalsA.retiros, b: totalsB.retiros, format: money },
+    { label: "Bono dado", a: totalsA.bono, b: totalsB.bono, format: money },
+    { label: "Neto (ventas − premios)", a: totalsA.neto, b: totalsB.neto, format: money },
+    { label: "Operaciones — cargas", a: totalsA.cargasCount, b: totalsB.cargasCount, format: identidad },
+    { label: "Operaciones — retiros", a: totalsA.retirosCount, b: totalsB.retirosCount, format: identidad },
+    { label: "Mensajes de publicidad", a: pubA ?? 0, b: pubB ?? 0, format: identidad },
+    { label: "Origen Nuevo — cantidad", a: totalsA.nuevos, b: totalsB.nuevos, format: identidad },
+    { label: "Origen Nuevo — monto", a: totalsA.montoNuevos, b: totalsB.montoNuevos, format: money },
+    { label: "Origen Referido — cantidad", a: totalsA.derivados, b: totalsB.derivados, format: identidad },
+    { label: "Origen Referido — monto", a: totalsA.montoDerivados, b: totalsB.montoDerivados, format: money },
+    { label: "Origen Lista (Bases) — cantidad", a: totalsA.cargasLista, b: totalsB.cargasLista, format: identidad },
+    { label: "Origen Lista (Bases) — monto", a: totalsA.montoLista, b: totalsB.montoLista, format: money },
+    { label: "Bajadas — efectivo", a: totalsA.bajadasEfectivo, b: totalsB.bajadasEfectivo, format: money },
+    { label: "Bajadas — fichas", a: totalsA.bajadasFichas, b: totalsB.bajadasFichas, format: money },
+    { label: "Bajadas — gastos", a: totalsA.bajadasGasto, b: totalsB.bajadasGasto, format: money },
+  ];
+
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <p className="text-xs font-bold text-indigo-300 mb-1.5">Período A</p>
+          <DateRangeFilter
+            rangeKey={rangeKeyA} dateFrom={dateFromA} dateTo={dateToA}
+            onPreset={(k) => { setRangeKeyA(k); applyPresetRango(k, setDateFromA, setDateToA); }}
+            onFrom={(v) => { setRangeKeyA("custom"); setDateFromA(v); }}
+            onTo={(v) => { setRangeKeyA("custom"); setDateToA(v); }}
+          />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-violet-300 mb-1.5">Período B</p>
+          <DateRangeFilter
+            rangeKey={rangeKeyB} dateFrom={dateFromB} dateTo={dateToB}
+            onPreset={(k) => { setRangeKeyB(k); applyPresetRango(k, setDateFromB, setDateToB); }}
+            onFrom={(v) => { setRangeKeyB("custom"); setDateFromB(v); }}
+            onTo={(v) => { setRangeKeyB("custom"); setDateToB(v); }}
+          />
+        </div>
+      </div>
+      <Card icon={<TrendingUp size={15} />} title="Comparativa" subtitle="Período A vs. Período B — mismos datos que Análisis">
+        <div className="overflow-x-auto -mx-1 px-1">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-900">
+              <tr className="text-slate-500 text-left">
+                <th className="py-2 px-2 font-semibold">Métrica</th>
+                <th className="py-2 px-2 font-semibold text-right text-indigo-300">Período A</th>
+                <th className="py-2 px-2 font-semibold text-right text-violet-300">Período B</th>
+                <th className="py-2 px-2 font-semibold text-right">Diferencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const diff = r.b - r.a;
+                return (
+                  <tr key={r.label} className="border-t border-white/5">
+                    <td className="py-2 px-2 font-bold text-slate-300">{r.label}</td>
+                    <td className="py-2 px-2 text-right">{r.format(r.a)}</td>
+                    <td className="py-2 px-2 text-right">{r.format(r.b)}</td>
+                    <td className={`py-2 px-2 text-right font-bold ${diff > 0 ? "text-emerald-400" : diff < 0 ? "text-rose-400" : "text-slate-500"}`}>
+                      {diff > 0 ? "+" : ""}{r.format(diff)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
   );
 }
 
