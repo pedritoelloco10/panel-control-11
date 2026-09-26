@@ -869,6 +869,50 @@ function applyPresetRango(key, setFrom, setTo) {
   else if (key === "todo") { setFrom(""); setTo(""); }
 }
 
+// Paleta categórica validada (2 series, modo oscuro) — ver skill de dataviz:
+// blue/orange pasan los 6 checks (CVD, contraste, etc.); blue/violeta (los colores
+// que se usaban antes para "Período A/B" en el resto del panel) NO pasan, así que
+// esta pestaña usa su propio par de colores en vez de reusar índigo/violeta.
+const COMPARATIVA_COLOR_A = "#3987e5"; // blue, slot 1
+const COMPARATIVA_COLOR_B = "#d95926"; // orange, slot 2
+
+function BarCompareGroup({ title, rows, colorA, colorB }) {
+  const groupMax = Math.max(1, ...rows.flatMap((r) => [Math.max(0, r.a), Math.max(0, r.b)]));
+  return (
+    <Card icon={<TrendingUp size={15} />} title={title}>
+      <div className="flex items-center gap-4 mb-3 text-[11px] text-slate-400">
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full flex-none" style={{ background: colorA }} /> Período A</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full flex-none" style={{ background: colorB }} /> Período B</span>
+      </div>
+      <div className="space-y-3">
+        {rows.map((r) => {
+          const pctA = (Math.max(0, r.a) / groupMax) * 100;
+          const pctB = (Math.max(0, r.b) / groupMax) * 100;
+          return (
+            <div key={r.label}>
+              <p className="text-[11px] text-slate-400 font-semibold mb-1">{r.label}</p>
+              <div className="space-y-[2px]">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-[10px] bg-white/5 rounded-[4px] overflow-hidden">
+                    <div className="h-full" style={{ width: `${pctA}%`, background: colorA, borderRadius: "0 4px 4px 0" }} />
+                  </div>
+                  <span className="text-[11px] text-slate-300 w-24 text-right flex-none tabular-nums">{r.format(r.a)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-[10px] bg-white/5 rounded-[4px] overflow-hidden">
+                    <div className="h-full" style={{ width: `${pctB}%`, background: colorB, borderRadius: "0 4px 4px 0" }} />
+                  </div>
+                  <span className="text-[11px] text-slate-300 w-24 text-right flex-none tabular-nums">{r.format(r.b)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function ComparativaTab({ computedAll, adminPin }) {
   const [rangeKeyA, setRangeKeyA] = useState("todo");
   const [dateFromA, setDateFromA] = useState("");
@@ -898,31 +942,33 @@ function ComparativaTab({ computedAll, adminPin }) {
   const totalsB = useMemo(() => sumTotals(computedB), [computedB]);
 
   const identidad = (v) => v;
-  const rows = [
-    { label: "Turnos", a: computedA.length, b: computedB.length, format: identidad },
+  const rowsMoney = [
     { label: "Ventas totales", a: totalsA.ventas, b: totalsB.ventas, format: money },
     { label: "Retiros pagados", a: totalsA.retiros, b: totalsB.retiros, format: money },
     { label: "Bono dado", a: totalsA.bono, b: totalsB.bono, format: money },
     { label: "Neto (ventas − premios)", a: totalsA.neto, b: totalsB.neto, format: money },
-    { label: "Operaciones — cargas", a: totalsA.cargasCount, b: totalsB.cargasCount, format: identidad },
-    { label: "Operaciones — retiros", a: totalsA.retirosCount, b: totalsB.retirosCount, format: identidad },
-    { label: "Mensajes de publicidad", a: pubA ?? 0, b: pubB ?? 0, format: identidad },
-    { label: "Origen Nuevo — cantidad", a: totalsA.nuevos, b: totalsB.nuevos, format: identidad },
     { label: "Origen Nuevo — monto", a: totalsA.montoNuevos, b: totalsB.montoNuevos, format: money },
-    { label: "Origen Referido — cantidad", a: totalsA.derivados, b: totalsB.derivados, format: identidad },
     { label: "Origen Referido — monto", a: totalsA.montoDerivados, b: totalsB.montoDerivados, format: money },
-    { label: "Origen Lista (Bases) — cantidad", a: totalsA.cargasLista, b: totalsB.cargasLista, format: identidad },
     { label: "Origen Lista (Bases) — monto", a: totalsA.montoLista, b: totalsB.montoLista, format: money },
     { label: "Bajadas — efectivo", a: totalsA.bajadasEfectivo, b: totalsB.bajadasEfectivo, format: money },
     { label: "Bajadas — fichas", a: totalsA.bajadasFichas, b: totalsB.bajadasFichas, format: money },
     { label: "Bajadas — gastos", a: totalsA.bajadasGasto, b: totalsB.bajadasGasto, format: money },
+  ];
+  const rowsCantidad = [
+    { label: "Turnos", a: computedA.length, b: computedB.length, format: identidad },
+    { label: "Operaciones — cargas", a: totalsA.cargasCount, b: totalsB.cargasCount, format: identidad },
+    { label: "Operaciones — retiros", a: totalsA.retirosCount, b: totalsB.retirosCount, format: identidad },
+    { label: "Mensajes de publicidad", a: pubA ?? 0, b: pubB ?? 0, format: identidad },
+    { label: "Origen Nuevo — cantidad", a: totalsA.nuevos, b: totalsB.nuevos, format: identidad },
+    { label: "Origen Referido — cantidad", a: totalsA.derivados, b: totalsB.derivados, format: identidad },
+    { label: "Origen Lista (Bases) — cantidad", a: totalsA.cargasLista, b: totalsB.cargasLista, format: identidad },
   ];
 
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <p className="text-xs font-bold text-indigo-300 mb-1.5">Período A</p>
+          <p className="text-xs font-bold mb-1.5" style={{ color: COMPARATIVA_COLOR_A }}>Período A</p>
           <DateRangeFilter
             rangeKey={rangeKeyA} dateFrom={dateFromA} dateTo={dateToA}
             onPreset={(k) => { setRangeKeyA(k); applyPresetRango(k, setDateFromA, setDateToA); }}
@@ -931,7 +977,7 @@ function ComparativaTab({ computedAll, adminPin }) {
           />
         </div>
         <div>
-          <p className="text-xs font-bold text-violet-300 mb-1.5">Período B</p>
+          <p className="text-xs font-bold mb-1.5" style={{ color: COMPARATIVA_COLOR_B }}>Período B</p>
           <DateRangeFilter
             rangeKey={rangeKeyB} dateFrom={dateFromB} dateTo={dateToB}
             onPreset={(k) => { setRangeKeyB(k); applyPresetRango(k, setDateFromB, setDateToB); }}
@@ -940,42 +986,8 @@ function ComparativaTab({ computedAll, adminPin }) {
           />
         </div>
       </div>
-      <Card icon={<TrendingUp size={15} />} title="Comparativa" subtitle="▲ violeta = mayor en Período B · ▼ índigo = mayor en Período A">
-        <div className="overflow-x-auto -mx-1 px-1">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-900">
-              <tr className="text-slate-500 text-left">
-                <th className="py-2 px-2 font-semibold">Métrica</th>
-                <th className="py-2 px-2 font-semibold text-right text-indigo-300">Período A</th>
-                <th className="py-2 px-2 font-semibold text-right text-violet-300">Período B</th>
-                <th className="py-2 px-2 font-semibold text-right">Diferencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const diff = r.b - r.a;
-                const pct = r.a ? Math.round((Math.abs(diff) / Math.abs(r.a)) * 100) : null;
-                return (
-                  <tr key={r.label} className="border-t border-white/5">
-                    <td className="py-2 px-2 font-bold text-slate-300">{r.label}</td>
-                    <td className="py-2 px-2 text-right text-indigo-300">{r.format(r.a)}</td>
-                    <td className="py-2 px-2 text-right text-violet-300">{r.format(r.b)}</td>
-                    <td className="py-2 px-2 text-right font-bold">
-                      {diff === 0 ? (
-                        <span className="text-slate-500">—</span>
-                      ) : (
-                        <span className={diff > 0 ? "text-violet-300" : "text-indigo-300"}>
-                          {diff > 0 ? "▲" : "▼"} {r.format(Math.abs(diff))}{pct !== null ? ` (${pct}%)` : ""}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <BarCompareGroup title="Resultado (en pesos)" rows={rowsMoney} colorA={COMPARATIVA_COLOR_A} colorB={COMPARATIVA_COLOR_B} />
+      <BarCompareGroup title="Operaciones (cantidades)" rows={rowsCantidad} colorA={COMPARATIVA_COLOR_A} colorB={COMPARATIVA_COLOR_B} />
     </>
   );
 }
