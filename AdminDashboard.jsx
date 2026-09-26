@@ -940,7 +940,7 @@ function ComparativaTab({ computedAll, adminPin }) {
           />
         </div>
       </div>
-      <Card icon={<TrendingUp size={15} />} title="Comparativa" subtitle="Período A vs. Período B — mismos datos que Análisis">
+      <Card icon={<TrendingUp size={15} />} title="Comparativa" subtitle="▲ violeta = mayor en Período B · ▼ índigo = mayor en Período A">
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-xs">
             <thead className="bg-slate-900">
@@ -954,13 +954,20 @@ function ComparativaTab({ computedAll, adminPin }) {
             <tbody>
               {rows.map((r) => {
                 const diff = r.b - r.a;
+                const pct = r.a ? Math.round((Math.abs(diff) / Math.abs(r.a)) * 100) : null;
                 return (
                   <tr key={r.label} className="border-t border-white/5">
                     <td className="py-2 px-2 font-bold text-slate-300">{r.label}</td>
-                    <td className="py-2 px-2 text-right">{r.format(r.a)}</td>
-                    <td className="py-2 px-2 text-right">{r.format(r.b)}</td>
-                    <td className={`py-2 px-2 text-right font-bold ${diff > 0 ? "text-emerald-400" : diff < 0 ? "text-rose-400" : "text-slate-500"}`}>
-                      {diff > 0 ? "+" : ""}{r.format(diff)}
+                    <td className="py-2 px-2 text-right text-indigo-300">{r.format(r.a)}</td>
+                    <td className="py-2 px-2 text-right text-violet-300">{r.format(r.b)}</td>
+                    <td className="py-2 px-2 text-right font-bold">
+                      {diff === 0 ? (
+                        <span className="text-slate-500">—</span>
+                      ) : (
+                        <span className={diff > 0 ? "text-violet-300" : "text-indigo-300"}>
+                          {diff > 0 ? "▲" : "▼"} {r.format(Math.abs(diff))}{pct !== null ? ` (${pct}%)` : ""}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
