@@ -262,8 +262,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const computed = useMemo(() => filteredShifts.map(computeShift), [filteredShifts]);
 
   const totals = useMemo(() => {
-    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0, cargasLista: 0, montoNuevos: 0, montoDerivados: 0, montoLista: 0 };
-    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; t.cargasLista += c.cargasLista; t.montoNuevos += c.montoNuevos; t.montoDerivados += c.montoDerivados; t.montoLista += c.montoLista; });
+    const t = { ventas: 0, retiros: 0, bajadas: 0, bajadasFichas: 0, bajadasEfectivo: 0, bajadasGasto: 0, neto: 0, bono: 0, nuevos: 0, derivados: 0, cargasLista: 0, montoNuevos: 0, montoDerivados: 0, montoLista: 0, cargasCount: 0, retirosCount: 0 };
+    computed.forEach((c) => { t.ventas += c.ventasTotal; t.retiros += c.retirosTotal; t.bajadas += c.bajadasTotal; t.bajadasFichas += c.bajadasFichas; t.bajadasEfectivo += c.bajadasEfectivo; t.bajadasGasto += c.bajadasGasto; t.neto += c.netoCaja; t.bono += c.bonoTotal; t.nuevos += c.nuevos; t.derivados += c.derivados; t.cargasLista += c.cargasLista; t.montoNuevos += c.montoNuevos; t.montoDerivados += c.montoDerivados; t.montoLista += c.montoLista; t.cargasCount += c.cargasCount; t.retirosCount += c.retirosCount; });
     return t;
   }, [computed]);
 
@@ -598,6 +598,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <StatBox label="Retiros pagados" value={money(totals.retiros)} negative />
             <StatBox label="Bono dado" value={money(totals.bono)} />
             <StatBox label="Neto (ventas − premios)" value={money(totals.neto)} positive={totals.neto >= 0} negative={totals.neto < 0} />
+            <StatBox label="Operaciones — cargas" value={totals.cargasCount} />
+            <StatBox label="Operaciones — retiros" value={totals.retirosCount} />
             <StatBox label="Mensajes de publicidad" value={publicidadCount === null ? "…" : publicidadCount} />
             <StatBox label="Origen Nuevo (publicidad)" value={totals.nuevos} sub={`Total ${money(totals.montoNuevos)}`} />
             <StatBox label="Origen Referido" value={totals.derivados} sub={`Total ${money(totals.montoDerivados)}`} />
