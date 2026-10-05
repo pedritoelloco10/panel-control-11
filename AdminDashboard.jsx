@@ -881,26 +881,28 @@ function BarCompareGroup({ title, rows, colorA, colorB }) {
   return (
     <Card icon={<TrendingUp size={15} />} title={title}>
       <div className="flex items-center gap-4 mb-3 text-[11px] text-slate-400">
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full flex-none" style={{ background: colorA }} /> Período A</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full flex-none" style={{ background: colorB }} /> Período B</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-[2px] rounded-full flex-none" style={{ background: colorA }} /> Período A</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-[2px] rounded-full flex-none" style={{ background: colorB }} /> Período B</span>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-3.5">
         {rows.map((r) => {
           const pctA = (Math.max(0, r.a) / groupMax) * 100;
           const pctB = (Math.max(0, r.b) / groupMax) * 100;
           return (
             <div key={r.label}>
-              <p className="text-[11px] text-slate-400 font-semibold mb-1">{r.label}</p>
-              <div className="space-y-[2px]">
+              <p className="text-[11px] text-slate-400 font-semibold mb-1.5">{r.label}</p>
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 h-[10px] bg-white/5 rounded-[4px] overflow-hidden">
-                    <div className="h-full" style={{ width: `${pctA}%`, background: colorA, borderRadius: "0 4px 4px 0" }} />
+                  <div className="flex-1 h-[2px] bg-white/10 rounded-full relative">
+                    <div className="absolute inset-y-0 left-0 h-[2px] rounded-full" style={{ width: `${pctA}%`, background: colorA }} />
+                    <div className="absolute top-1/2 w-[7px] h-[7px] rounded-full -translate-y-1/2 -translate-x-1/2" style={{ left: `${pctA}%`, background: colorA }} />
                   </div>
                   <span className="text-[11px] text-slate-300 w-24 text-right flex-none tabular-nums">{r.format(r.a)}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 h-[10px] bg-white/5 rounded-[4px] overflow-hidden">
-                    <div className="h-full" style={{ width: `${pctB}%`, background: colorB, borderRadius: "0 4px 4px 0" }} />
+                  <div className="flex-1 h-[2px] bg-white/10 rounded-full relative">
+                    <div className="absolute inset-y-0 left-0 h-[2px] rounded-full" style={{ width: `${pctB}%`, background: colorB }} />
+                    <div className="absolute top-1/2 w-[7px] h-[7px] rounded-full -translate-y-1/2 -translate-x-1/2" style={{ left: `${pctB}%`, background: colorB }} />
                   </div>
                   <span className="text-[11px] text-slate-300 w-24 text-right flex-none tabular-nums">{r.format(r.b)}</span>
                 </div>
