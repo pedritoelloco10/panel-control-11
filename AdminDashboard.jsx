@@ -888,6 +888,7 @@ function BarCompareGroup({ title, rows, colorA, colorB }) {
         {rows.map((r) => {
           const pctA = (Math.max(0, r.a) / groupMax) * 100;
           const pctB = (Math.max(0, r.b) / groupMax) * 100;
+          const pctDiff = r.a ? Math.round(((r.b - r.a) / Math.abs(r.a)) * 100) : null;
           return (
             <div key={r.label}>
               <p className="text-[11px] text-slate-400 font-semibold mb-1.5">{r.label}</p>
@@ -898,6 +899,7 @@ function BarCompareGroup({ title, rows, colorA, colorB }) {
                     <div className="absolute top-1/2 w-[7px] h-[7px] rounded-full -translate-y-1/2 -translate-x-1/2" style={{ left: `${pctA}%`, background: colorA }} />
                   </div>
                   <span className="text-[11px] text-slate-300 w-24 text-right flex-none tabular-nums">{r.format(r.a)}</span>
+                  <span className="w-12 flex-none" />
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-[2px] bg-white/10 rounded-full relative">
@@ -905,6 +907,9 @@ function BarCompareGroup({ title, rows, colorA, colorB }) {
                     <div className="absolute top-1/2 w-[7px] h-[7px] rounded-full -translate-y-1/2 -translate-x-1/2" style={{ left: `${pctB}%`, background: colorB }} />
                   </div>
                   <span className="text-[11px] text-slate-300 w-24 text-right flex-none tabular-nums">{r.format(r.b)}</span>
+                  <span className="text-[10px] text-slate-500 w-12 text-right flex-none tabular-nums">
+                    {pctDiff === null ? "—" : `${pctDiff > 0 ? "+" : ""}${pctDiff}%`}
+                  </span>
                 </div>
               </div>
             </div>
