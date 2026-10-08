@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "./supabaseClient";
-import { PLATFORMS, num, todayStr, nowStr, classifyTurno, seedOps, SEED_ROWS } from "./lib";
+import { PLATFORMS, num, todayStr, nowStr, classifyTurno, seedOps, SEED_ROWS, dedupeOpsIds } from "./lib";
 
 // Este hook mantiene el turno del empleado como una fila real en la tabla `shifts`
 // de Supabase, status='abierto', desde el momento en que se identifica hasta que
@@ -69,7 +69,7 @@ export function useTurnoDraft(identity) {
         setMeta({ fecha: s.fecha, horaInicio: s.hora_inicio?.slice(0, 5) || nowStr(), horaFin: "", responsable: s.responsable });
         setBillInicio(s.bill_inicio || {}); setBillCierre(s.bill_cierre || {});
         setStockInicio(s.stock_inicio || { B: "", G: "" }); setStockCierreInf(s.stock_cierre || { B: "", G: "" });
-        setOps((s.ops && s.ops.length ? s.ops : seedOps(SEED_ROWS)));
+        setOps(dedupeOpsIds(s.ops && s.ops.length ? s.ops : seedOps(SEED_ROWS)));
         setBajadas(s.bajadas || []); setMovs(s.movs || []); setNotas(s.notas || "");
         // (ya no se usa mensajes_enviados)
         setReady(true);

@@ -55,7 +55,27 @@ export function money(n) {
   return sign + "$" + Math.round(Math.abs(n || 0)).toLocaleString("es-AR");
 }
 export function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  // crypto.randomUUID() (122 bits de entropía real) en vez de Date.now()+Math.random():
+  // ese esquema viejo solo tenía ~5 caracteres base36 (~26 bits) de verdadera aleatoriedad,
+  // porque Date.now() se repite entre llamadas hechas en el mismo milisegundo — y eso
+  // pasaba seguido, porque seedOps/GROW_BATCH generan muchas filas en un mismo loop
+  // síncrono. Dos filas con el mismo id hacían que escribir en una actualizara ambas.
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7);
+}
+// Si por algún motivo dos filas de ops ya guardadas (de antes de este fix) comparten
+// id, al cargarlas se les asigna un id nuevo a las repetidas — si no, quedarían
+// "pegadas" para siempre (escribir en una seguiría escribiendo en la otra) aunque
+// se refresque la página, porque el id duplicado ya está guardado en la base.
+export function dedupeOpsIds(ops) {
+  const seen = new Set();
+  let changed = false;
+  const next = ops.map((o) => {
+    if (seen.has(o.id)) { changed = true; return { ...o, id: uid() }; }
+    seen.add(o.id);
+    return o;
+  });
+  return changed ? next : ops;
 }
 export function todayStr() {
   return new Date().toISOString().slice(0, 10);
