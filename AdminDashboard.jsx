@@ -147,7 +147,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
   }, [adminPin, dateFrom, dateTo]);
 
   async function loadArchivados() {
-    const { data } = await supabase.from("shifts").select("*").eq("archivado", true).order("updated_at", { ascending: false }).limit(200);
+    const { data } = await supabase.rpc("admin_list_shifts_archivados", { input_admin_pin: adminPin });
     setArchivados(data || []);
   }
   async function restaurarTurno(id) {
@@ -158,11 +158,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
   async function loadAll() {
     setLoading(true);
     const [{ data: closedShifts }, { data: live }, { data: emp }, { data: wal }, { data: dbList }] = await Promise.all([
-      supabase.from("shifts").select("*").eq("status", "cerrado").eq("archivado", false).order("cerrado_at", { ascending: false, nullsFirst: false }),
-      supabase.from("shifts").select("*").eq("status", "abierto").eq("archivado", false).order("updated_at", { ascending: false }),
+      supabase.rpc("admin_list_shifts_cerrados", { input_admin_pin: adminPin }),
+      supabase.rpc("admin_list_shifts_abiertos", { input_admin_pin: adminPin }),
       supabase.rpc("admin_list_employees", { input_admin_pin: adminPin }),
       supabase.from("wallets").select("*").order("orden"),
-      supabase.from("databases").select("*").order("created_at", { ascending: false }),
+      supabase.rpc("admin_list_databases", { input_admin_pin: adminPin }),
     ]);
     setShifts(closedShifts || []);
     setLiveShifts(live || []);
