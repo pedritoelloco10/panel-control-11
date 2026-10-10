@@ -1304,15 +1304,15 @@ function EmployeeManager({ employees, adminPin, onChange }) {
   const [newRecibeLeads, setNewRecibeLeads] = useState(true);
   const [newCupoLeads, setNewCupoLeads] = useState("");
 
-  function startEdit(e) { setEditing(e.id); setEditName(e.nombre); setEditPin(e.pin); setEditRecibeLeads(e.recibe_leads !== false); setEditCupoLeads(e.cupo_leads != null ? String(e.cupo_leads) : ""); }
+  function startEdit(e) { setEditing(e.id); setEditName(e.nombre); setEditPin(""); setEditRecibeLeads(e.recibe_leads !== false); setEditCupoLeads(e.cupo_leads != null ? String(e.cupo_leads) : ""); }
   async function commitEdit() {
-    if (!editName.trim() || editPin.length !== 4) return;
+    if (!editName.trim() || (editPin.length > 0 && editPin.length !== 4)) return;
     const { data, error } = await supabase.rpc("admin_update_employee", {
       input_admin_pin: adminPin, target_id: editing, new_nombre: editName.trim(), new_pin: editPin, new_recibe_leads: editRecibeLeads,
       new_cupo_leads: editCupoLeads.trim() === "" ? null : parseInt(editCupoLeads, 10),
     });
     if (error) { alert("Error al editar: " + error.message); return; }
-    if (data === false) { alert("No se pudo editar — revisá el PIN de admin."); return; }
+    if (data === false) { alert("No se pudo editar — revisá el PIN de admin, o si pusiste un PIN nuevo, puede que ya lo tenga otro empleado."); return; }
     setEditing(null); onChange();
   }
   async function remove(id) {
@@ -1333,7 +1333,7 @@ function EmployeeManager({ employees, adminPin, onChange }) {
       new_cupo_leads: newCupoLeads.trim() === "" ? null : parseInt(newCupoLeads, 10),
     });
     if (error) { alert("Error al agregar: " + error.message); return; }
-    if (data === false) { alert("No se pudo agregar — revisá el PIN de admin."); return; }
+    if (data === false) { alert("No se pudo agregar — revisá el PIN de admin, o puede que ese PIN de 4 dígitos ya lo tenga otro empleado."); return; }
     setNewName(""); setNewPin(""); setNewRecibeLeads(true); setNewCupoLeads(""); onChange();
   }
 
@@ -1346,9 +1346,10 @@ function EmployeeManager({ employees, adminPin, onChange }) {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
                   <input value={editName} onChange={(ev) => setEditName(ev.target.value)} className="input !py-1 flex-1 text-xs" />
-                  <input value={editPin} onChange={(ev) => setEditPin(ev.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" className="input !py-1 w-20 text-xs text-center tracking-widest" />
+                  <input value={editPin} onChange={(ev) => setEditPin(ev.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" placeholder="PIN nuevo" className="input !py-1 w-24 text-xs text-center tracking-widest" />
                   <button onClick={commitEdit} className="text-emerald-400 font-bold text-[10px]">OK</button>
                 </div>
+                <p className="text-[9px] text-slate-600">Dejá el PIN en blanco para no cambiarlo.</p>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setEditRecibeLeads(!editRecibeLeads)} className={`flex-1 text-[10px] font-bold px-2 py-1 rounded-lg ${editRecibeLeads ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-slate-500"}`}>
                     {editRecibeLeads ? "✓ Participa del reparto de leads" : "No recibe leads (ej: no manda mensajes)"}
@@ -1365,7 +1366,6 @@ function EmployeeManager({ employees, adminPin, onChange }) {
                 <span className="flex-1 text-xs font-semibold">{e.nombre}</span>
                 {e.recibe_leads === false && <span className="text-[9px] bg-white/5 text-slate-500 rounded-full px-2 py-0.5">sin leads</span>}
                 {e.cupo_leads != null && <span className="text-[9px] bg-indigo-500/15 text-indigo-300 rounded-full px-2 py-0.5">cupo {e.cupo_leads}</span>}
-                <span className="text-slate-500 text-xs tracking-widest">{e.pin}</span>
                 <button onClick={() => startEdit(e)} className="text-slate-600 hover:text-indigo-300"><Pencil size={13} /></button>
                 <button onClick={() => remove(e.id)} className="text-slate-600 hover:text-rose-400"><X size={13} /></button>
               </div>
