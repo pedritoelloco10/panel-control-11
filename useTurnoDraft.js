@@ -54,9 +54,7 @@ export function useTurnoDraft(identity) {
       setOtherOpenBy(null);
       setRefuerzoPropioAbierto(false);
       setLoadError("");
-      const { data: mine, error: mineErr } = await supabase
-        .from("shifts").select("*").eq("status", "abierto").eq("archivado", false).eq("responsable", identity.nombre)
-        .order("created_at", { ascending: false }).limit(1);
+      const { data: mine, error: mineErr } = await supabase.rpc("session_mi_turno_abierto", { input_token: identity.token });
       if (cancelled) return;
       if (mineErr) {
         setLoadError("No se pudo revisar si ya tenías un turno abierto: " + mineErr.message);
@@ -96,9 +94,7 @@ export function useTurnoDraft(identity) {
       // No tengo turno propio abierto. Antes de crear uno, me fijo si YA hay un turno
       // abierto a nombre de otra persona: si lo hay, no creo uno nuevo (evita duplicar
       // la caja y que dos personas escriban el mismo turno a la vez).
-      const { data: anyOpen, error: anyOpenErr } = await supabase
-        .from("shifts").select("*").eq("status", "abierto").eq("archivado", false)
-        .order("created_at", { ascending: false }).limit(1);
+      const { data: anyOpen, error: anyOpenErr } = await supabase.rpc("session_turno_abierto_actual", { input_token: identity.token });
       if (cancelled) return;
       if (anyOpenErr) {
         setLoadError("No se pudo revisar si había otro turno abierto: " + anyOpenErr.message);
@@ -123,11 +119,7 @@ export function useTurnoDraft(identity) {
       // que pasó una vez en producción (una columna que no existía todavía tiraba
       // error acá, y como antes no se revisaba, el turno se abría en cero sin avisar
       // a nadie). Ahora se frena y se lo pide a Admin en vez de arriesgar la plata.
-      const { data: lastClosed, error: lastClosedErr } = await supabase
-        .from("shifts").select("*").eq("status", "cerrado").eq("archivado", false)
-        .not("cerrado_at", "is", null)
-        .not("excluir_arrastre", "is", true)
-        .order("cerrado_at", { ascending: false, nullsFirst: false }).limit(1);
+      const { data: lastClosed, error: lastClosedErr } = await supabase.rpc("session_ultimo_cierre_arrastre", { input_token: identity.token });
       if (cancelled) return;
       if (lastClosedErr) {
         setLoadError("No se pudo calcular con qué arrancar el turno (arrastre del cierre anterior): " + lastClosedErr.message);
@@ -161,9 +153,7 @@ export function useTurnoDraft(identity) {
         // visto abierto — es exactamente lo que pasó, solo que nos enteramos
         // un paso más tarde.
         if (insErr.code === "23505") {
-          const { data: nowOpen } = await supabase
-            .from("shifts").select("*").eq("status", "abierto").eq("archivado", false)
-            .order("created_at", { ascending: false }).limit(1);
+          const { data: nowOpen } = await supabase.rpc("session_turno_abierto_actual", { input_token: identity.token });
           if (cancelled) return;
           if (nowOpen && nowOpen.length) setOtherOpenBy({ nombre: nowOpen[0].responsable, hora: nowOpen[0].hora_inicio });
           else setError("No se pudo abrir el turno, probá de nuevo.");
