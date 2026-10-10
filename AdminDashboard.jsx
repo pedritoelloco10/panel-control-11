@@ -134,11 +134,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
   function applyPresetTurno(key) {
     setTurnoRangeKey(key);
-    const today = todayStr();
-    if (key === "hoy") { setTurnoDateFrom(today); setTurnoDateTo(today); }
-    else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setTurnoDateFrom(d.toISOString().slice(0, 10)); setTurnoDateTo(today); }
-    else if (key === "mes") { const d = new Date(); d.setDate(1); setTurnoDateFrom(d.toISOString().slice(0, 10)); setTurnoDateTo(today); }
-    else if (key === "todo") { setTurnoDateFrom(""); setTurnoDateTo(""); }
+    applyPresetRango(key, setTurnoDateFrom, setTurnoDateTo);
   }
 
   useEffect(() => {
@@ -243,11 +239,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
   // --- Filtro de fechas para el análisis histórico ---
   function applyPreset(key) {
     setRangeKey(key);
-    const today = todayStr();
-    if (key === "hoy") { setDateFrom(today); setDateTo(today); }
-    else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
-    else if (key === "mes") { const d = new Date(); d.setDate(1); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
-    else if (key === "todo") { setDateFrom(""); setDateTo(""); }
+    applyPresetRango(key, setDateFrom, setDateTo);
   }
   useEffect(() => { applyPreset("7d"); }, []);
 
@@ -1812,11 +1804,7 @@ function BaseFicha({ base, contacts, shifts, liveShifts, adminPin, onChange, onC
 
   function applyPreset(key) {
     setRangeKey(key);
-    const today = todayStr();
-    if (key === "hoy") { setDateFrom(today); setDateTo(today); }
-    else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
-    else if (key === "mes") { const d = new Date(); d.setDate(1); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
-    else if (key === "todo") { setDateFrom(""); setDateTo(""); }
+    applyPresetRango(key, setDateFrom, setDateTo);
   }
 
   const filtrados = useMemo(() => {
@@ -1985,11 +1973,7 @@ function ClientesRanking({ computedAll }) {
 
   function applyPreset(key) {
     setRangeKey(key);
-    const today = todayStr();
-    if (key === "hoy") { setDateFrom(today); setDateTo(today); }
-    else if (key === "7d") { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
-    else if (key === "mes") { const d = new Date(); d.setDate(1); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today); }
-    else if (key === "todo") { setDateFrom(""); setDateTo(""); }
+    applyPresetRango(key, setDateFrom, setDateTo);
   }
 
   const ranking = useMemo(() => {

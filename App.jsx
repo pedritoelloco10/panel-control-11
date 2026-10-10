@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react";
 import { Lock, Sparkles, X, ArrowLeft, Flame } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { useTurnoDraft } from "./useTurnoDraft";
 import EmployeePinGate from "./EmployeePinGate";
 import TurnoForm from "./TurnoForm";
 import OperacionesTab from "./OperacionesTab";
-import BasesView from "./BasesView";
-import AdminDashboard from "./AdminDashboard";
+// Bases y Admin se cargan recién al entrar a esas pestañas — un empleado
+// que solo usa Turno/Operaciones nunca descarga ese código.
+const BasesView = lazy(() => import("./BasesView"));
+const AdminDashboard = lazy(() => import("./AdminDashboard"));
+
+function CargandoSeccion() {
+  return <p className="text-center text-slate-500 text-xs pt-10">Cargando...</p>;
+}
 
 export default function App() {
   const [view, setView] = useState("turno"); // turno | operaciones | bases | adminGate | admin
@@ -105,7 +111,11 @@ export default function App() {
         )}
         {view === "turno" && (identity ? <TurnoForm wallets={wallets} draft={{ ...draft, submitTurno: handleSubmit }} identity={identity} goOps={() => setView("operaciones")} /> : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "operaciones" && (identity ? <OperacionesTab draft={draft} identity={identity} /> : <EmployeePinGate onIdentify={setIdentity} />)}
-        {view === "bases" && (identity ? <BasesView identity={identity} onLogout={logout} /> : <EmployeePinGate onIdentify={setIdentity} />)}
+        {view === "bases" && (identity ? (
+          <Suspense fallback={<CargandoSeccion />}>
+            <BasesView identity={identity} onLogout={logout} />
+          </Suspense>
+        ) : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "adminGate" && (
           <PinGate
             pinInput={pinInput} setPinInput={setPinInput} pinError={pinError} checking={pinChecking}
@@ -113,7 +123,11 @@ export default function App() {
             onBack={() => setView("turno")}
           />
         )}
-        {view === "admin" && <AdminDashboard adminPin={adminPin} onExit={exitAdmin} />}
+        {view === "admin" && (
+          <Suspense fallback={<CargandoSeccion />}>
+            <AdminDashboard adminPin={adminPin} onExit={exitAdmin} />
+          </Suspense>
+        )}
       </div>
     </div>
   );
