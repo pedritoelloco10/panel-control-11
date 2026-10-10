@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { X, Lock, WifiOff, AlertTriangle, Megaphone } from "lucide-react";
 import { Card } from "./ui";
 import { PLATFORMS, num, money, formatMiles, blankOp, seedOps, GROW_BATCH } from "./lib";
@@ -50,12 +50,27 @@ export default function OperacionesTab({ draft, identity }) {
     })();
   }, []);
 
-  async function recordarCliente(id) {
+  const recordarCliente = useCallback(async (id) => {
     const v = (id || "").trim();
     if (!v || clientesConocidos.includes(v)) return;
     setClientesConocidos((prev) => [v, ...prev]);
     await supabase.from("clientes").upsert({ identificador: v }, { onConflict: "identificador" });
-  }
+  }, [clientesConocidos]);
+
+  // Identidades estables (useCallback) a propósito: OpRow está memoizado con
+  // React.memo, así que si estas funciones cambiaran de referencia en cada
+  // render, se perdería el memo y las 150+ filas de la grilla se
+  // redibujarían enteras con cada tecla apretada en cualquier campo.
+  const updateOp = useCallback((id, patch, index) => {
+    setOps((prev) => {
+      const next = prev.map((o) => (o.id === id ? { ...o, ...patch } : o));
+      if ("monto" in patch && index === prev.length - 1 && patch.monto !== "") {
+        for (let i = 0; i < GROW_BATCH; i++) next.push(blankOp());
+      }
+      return next;
+    });
+  }, [setOps]);
+  const removeOp = useCallback((id) => { setOps((prev) => prev.filter((o) => o.id !== id)); }, [setOps]);
 
   if (loadError) {
     return (
@@ -79,16 +94,6 @@ export default function OperacionesTab({ draft, identity }) {
     );
   }
 
-  function updateOp(id, patch, index) {
-    setOps((prev) => {
-      const next = prev.map((o) => (o.id === id ? { ...o, ...patch } : o));
-      if ("monto" in patch && index === prev.length - 1 && patch.monto !== "") {
-        for (let i = 0; i < GROW_BATCH; i++) next.push(blankOp());
-      }
-      return next;
-    });
-  }
-  function removeOp(id) { setOps((prev) => prev.filter((o) => o.id !== id)); }
   function clearEmpty() { setOps((prev) => prev.filter((o) => o.monto !== "")); }
 
   const filledCount = ops.filter((o) => o.monto !== "").length;
@@ -144,7 +149,7 @@ export default function OperacionesTab({ draft, identity }) {
 
       <div className="space-y-1.5">
         {ops.map((o, i) => (
-          <OpRow key={o.id} o={o} index={i} onUpdate={(patch) => updateOp(o.id, patch, i)} onRemove={() => removeOp(o.id)} onClienteDone={recordarCliente} />
+          <OpRow key={o.id} o={o} index={i} onUpdate={updateOp} onRemove={removeOp} onClienteDone={recordarCliente} />
         ))}
       </div>
       <datalist id="clientes-list">
@@ -160,9 +165,14 @@ function focusField(row, field) {
   if (el) { el.focus(); el.select && el.select(); }
 }
 
-function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
+// React.memo + onUpdate/onRemove con identidad estable (ver useCallback en
+// OperacionesTab): así, escribir en una fila ya no obliga a React a
+// redibujar las demás — con un turno largo (cientos de filas) esto era lo
+// que hacía sentir pesado el teclado.
+const OpRow = React.memo(function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
   const hasData = o.monto !== "";
   const esCarga = o.tipo === "carga";
+  const patch = (p) => onUpdate(o.id, p, index);
 
   function makeKeyDown(field) {
     return (e) => {
@@ -185,9 +195,9 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
       // Atajos de letra, solo tienen sentido parado en el monto (para no interferir con escribir el número de cliente).
       if (field === "monto") {
         const k = e.key.toLowerCase();
-        if (k === "b" || k === "g") { e.preventDefault(); onUpdate({ plataforma: k.toUpperCase() }); return; }
-        if (k === "c") { e.preventDefault(); onUpdate({ tipo: "carga" }); return; }
-        if (k === "r") { e.preventDefault(); onUpdate({ tipo: "retiro" }); return; }
+        if (k === "b" || k === "g") { e.preventDefault(); patch({ plataforma: k.toUpperCase() }); return; }
+        if (k === "c") { e.preventDefault(); patch({ tipo: "carga" }); return; }
+        if (k === "r") { e.preventDefault(); patch({ tipo: "retiro" }); return; }
       }
     };
   }
@@ -196,19 +206,19 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
     <div className="flex items-center gap-1.5 bg-white/[0.02] ring-1 ring-white/5 rounded-xl px-2 py-1.5">
       <div className="flex gap-0.5">
         {["B", "G"].map((p) => (
-          <button key={p} onClick={() => onUpdate({ plataforma: p })} className={`w-6 h-6 rounded text-[10px] font-black ${o.plataforma === p ? "bg-indigo-500 text-white" : "bg-white/5 text-slate-500"}`}>{p}</button>
+          <button key={p} onClick={() => patch({ plataforma: p })} className={`w-6 h-6 rounded text-[10px] font-black ${o.plataforma === p ? "bg-indigo-500 text-white" : "bg-white/5 text-slate-500"}`}>{p}</button>
         ))}
       </div>
       <div className="flex gap-0.5">
         {[["carga", "C"], ["retiro", "R"]].map(([t, l]) => (
-          <button key={t} onClick={() => onUpdate({ tipo: t })} className={`w-6 h-6 rounded text-[10px] font-black ${o.tipo === t ? "bg-violet-500 text-white" : "bg-white/5 text-slate-500"}`}>{l}</button>
+          <button key={t} onClick={() => patch({ tipo: t })} className={`w-6 h-6 rounded text-[10px] font-black ${o.tipo === t ? "bg-violet-500 text-white" : "bg-white/5 text-slate-500"}`}>{l}</button>
         ))}
       </div>
       <div className="flex-1 min-w-0">
         <input
           inputMode="numeric" placeholder="Monto" value={o.monto}
           data-row={index} data-field="monto"
-          onChange={(e) => onUpdate({ monto: formatMiles(e.target.value) })}
+          onChange={(e) => patch({ monto: formatMiles(e.target.value) })}
           onKeyDown={makeKeyDown("monto")}
           className="input !py-1.5 text-xs"
         />
@@ -218,7 +228,7 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
           <input
             inputMode="numeric" placeholder="Bono fichas" value={o.bono}
             data-row={index} data-field="bono"
-            onChange={(e) => onUpdate({ bono: formatMiles(e.target.value) })}
+            onChange={(e) => patch({ bono: formatMiles(e.target.value) })}
             onKeyDown={makeKeyDown("bono")}
             className="input !py-1.5 text-xs"
           />
@@ -228,7 +238,7 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
         <input
           list="clientes-list" placeholder="Cliente" value={o.cliente || ""} maxLength={12}
           data-row={index} data-field="cliente"
-          onChange={(e) => onUpdate({ cliente: e.target.value })}
+          onChange={(e) => patch({ cliente: e.target.value })}
           onKeyDown={makeKeyDown("cliente")}
           onBlur={(e) => onClienteDone(e.target.value)}
           className="input !py-1.5 text-xs !px-1.5 text-center"
@@ -236,12 +246,12 @@ function OpRow({ o, index, onUpdate, onRemove, onClienteDone }) {
       </div>
       <div className="flex gap-0.5">
         {[["nuevo", "P"], ["derivado", "R"], ["lista", "L"]].map(([v, l]) => (
-          <button key={v} onClick={() => onUpdate({ origen: o.origen === v ? null : v })} className={`w-6 h-6 rounded text-[9px] font-black ${o.origen === v ? "bg-emerald-500 text-white" : "bg-white/5 text-slate-500"}`}>{l}</button>
+          <button key={v} onClick={() => patch({ origen: o.origen === v ? null : v })} className={`w-6 h-6 rounded text-[9px] font-black ${o.origen === v ? "bg-emerald-500 text-white" : "bg-white/5 text-slate-500"}`}>{l}</button>
         ))}
       </div>
       {hasData && (
-        <button onClick={onRemove} className="text-slate-700 hover:text-rose-400 flex-none"><X size={14} /></button>
+        <button onClick={() => onRemove(o.id)} className="text-slate-700 hover:text-rose-400 flex-none"><X size={14} /></button>
       )}
     </div>
   );
-}
+});
