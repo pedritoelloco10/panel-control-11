@@ -345,9 +345,15 @@ export default function AdminDashboard({ adminPin, onExit }) {
       let ventasTotal = 0, retirosTotal = 0;
       const stockDelta = { B: 0, G: 0 };
       const porPlataforma = { B: { ventas: 0, premios: 0, bono: 0 }, G: { ventas: 0, premios: 0, bono: 0 } };
+      let origenP = 0, origenR = 0, origenL = 0;
       (live.ops || []).forEach((o) => {
         const m = num(o.monto);
-        if (o.tipo === "carga") { ventasTotal += m; stockDelta[o.plataforma] -= m + num(o.bono); porPlataforma[o.plataforma].ventas += m; porPlataforma[o.plataforma].bono += num(o.bono); }
+        if (o.tipo === "carga") {
+          ventasTotal += m; stockDelta[o.plataforma] -= m + num(o.bono); porPlataforma[o.plataforma].ventas += m; porPlataforma[o.plataforma].bono += num(o.bono);
+          if (o.origen === "nuevo") origenP++;
+          else if (o.origen === "derivado") origenR++;
+          else if (o.origen === "lista") origenL++;
+        }
         else { retirosTotal += m; stockDelta[o.plataforma] += m; porPlataforma[o.plataforma].premios += m; }
       });
       const bajadasTotal = (live.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
@@ -367,6 +373,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
         bajadasTotal, bajadasFichas, bajadasGasto, bajadasEfectivo,
         contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: (live.ops || []).length, opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
+        origenP, origenR, origenL, mensajesPublicidad: publicidadByShift[live.id] || 0,
       };
     }
     if (shifts.length) {
@@ -379,10 +386,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
         bajadasTotal: c.bajadasTotal, bajadasFichas: c.bajadasFichas, bajadasGasto: c.bajadasGasto, bajadasEfectivo: c.bajadasEfectivo,
         contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: c.cargasCount + c.retirosCount, opsCount: (last.ops || []).length, ops: last.ops || [],
+        origenP: c.nuevos, origenR: c.derivados, origenL: c.cargasLista, mensajesPublicidad: publicidadByShift[last.id] || 0,
       };
     }
     return null;
-  }, [liveShifts, shifts, empTodayBaseStats]);
+  }, [liveShifts, shifts, empTodayBaseStats, publicidadByShift]);
 
   if (loading) return <p className="text-slate-500 text-sm text-center mt-16">Cargando panel...</p>;
 
@@ -485,6 +493,12 @@ export default function AdminDashboard({ adminPin, onExit }) {
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.contestaron}</p><p className="text-[9px] text-slate-500 uppercase">Contestaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.cargaron}</p><p className="text-[9px] text-slate-500 uppercase">Cargaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.movimientos}</p><p className="text-[9px] text-slate-500 uppercase">Movimientos (cargas+retiros)</p></div>
+              </div>
+              <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-white/5">
+                <div className="text-center"><p className="text-lg font-black text-indigo-300">{ahoraMismo.mensajesPublicidad}</p><p className="text-[9px] text-slate-500 uppercase">Msj. publicidad</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenP}</p><p className="text-[9px] text-slate-500 uppercase">P · Nuevo</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenR}</p><p className="text-[9px] text-slate-500 uppercase">R · Referido</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenL}</p><p className="text-[9px] text-slate-500 uppercase">L · Lista</p></div>
               </div>
             </Card>
           )}
