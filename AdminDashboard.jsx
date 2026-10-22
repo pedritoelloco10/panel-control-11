@@ -21,18 +21,26 @@ const CSV_HEADERS = [
 function computeShift(shift) {
   let ventasTotal = 0, retirosTotal = 0;
   let nuevos = 0, derivados = 0, cargasLista = 0, montoNuevos = 0, montoDerivados = 0, montoLista = 0, cargasCount = 0, retirosCount = 0;
-  const porPlataforma = { B: { ventas: 0, premios: 0, bono: 0 }, G: { ventas: 0, premios: 0, bono: 0 } };
+  const porPlataforma = {
+    B: { ventas: 0, premios: 0, bono: 0, cargasCount: 0, retirosCount: 0, origenP: 0, origenR: 0, origenL: 0 },
+    G: { ventas: 0, premios: 0, bono: 0, cargasCount: 0, retirosCount: 0, origenP: 0, origenR: 0, origenL: 0 },
+  };
   (shift.ops || []).forEach((o) => {
     const m = num(o.monto);
     if (o.tipo === "carga") {
       ventasTotal += m; cargasCount++;
-      if (porPlataforma[o.plataforma]) { porPlataforma[o.plataforma].ventas += m; porPlataforma[o.plataforma].bono += num(o.bono); }
+      if (porPlataforma[o.plataforma]) {
+        porPlataforma[o.plataforma].ventas += m; porPlataforma[o.plataforma].bono += num(o.bono); porPlataforma[o.plataforma].cargasCount++;
+        if (o.origen === "nuevo") porPlataforma[o.plataforma].origenP++;
+        else if (o.origen === "derivado") porPlataforma[o.plataforma].origenR++;
+        else if (o.origen === "lista") porPlataforma[o.plataforma].origenL++;
+      }
       if (o.origen === "nuevo") { nuevos++; montoNuevos += m; }
       if (o.origen === "derivado") { derivados++; montoDerivados += m; }
       if (o.origen === "lista") { cargasLista++; montoLista += m; }
     } else {
       retirosTotal += m; retirosCount++;
-      if (porPlataforma[o.plataforma]) porPlataforma[o.plataforma].premios += m;
+      if (porPlataforma[o.plataforma]) { porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
     }
   });
   const bonoTotal = porPlataforma.B.bono + porPlataforma.G.bono;
@@ -262,8 +270,10 @@ export default function AdminDashboard({ adminPin, onExit }) {
   const totals = useMemo(() => sumTotals(computed), [computed]);
 
   const totalsPorPlataforma = useMemo(() => {
-    const t = { B: { ventas: 0, premios: 0, bono: 0 }, G: { ventas: 0, premios: 0, bono: 0 } };
-    computed.forEach((c) => { PLATFORMS.forEach((p) => { t[p.key].ventas += c.porPlataforma[p.key].ventas; t[p.key].premios += c.porPlataforma[p.key].premios; t[p.key].bono += c.porPlataforma[p.key].bono; }); });
+    const campos = ["ventas", "premios", "bono", "cargasCount", "retirosCount", "origenP", "origenR", "origenL"];
+    const t = {};
+    PLATFORMS.forEach((p) => { t[p.key] = {}; campos.forEach((f) => { t[p.key][f] = 0; }); });
+    computed.forEach((c) => { PLATFORMS.forEach((p) => { campos.forEach((f) => { t[p.key][f] += c.porPlataforma[p.key][f] || 0; }); }); });
     return t;
   }, [computed]);
 
@@ -344,11 +354,20 @@ export default function AdminDashboard({ adminPin, onExit }) {
       const billInicioTotal = Object.values(live.bill_inicio || {}).reduce((s, v) => s + num(v), 0);
       let ventasTotal = 0, retirosTotal = 0;
       const stockDelta = { B: 0, G: 0 };
-      const porPlataforma = { B: { ventas: 0, premios: 0, bono: 0 }, G: { ventas: 0, premios: 0, bono: 0 } };
+      const porPlataforma = {
+        B: { ventas: 0, premios: 0, bono: 0, cargasCount: 0, retirosCount: 0, origenP: 0, origenR: 0, origenL: 0 },
+        G: { ventas: 0, premios: 0, bono: 0, cargasCount: 0, retirosCount: 0, origenP: 0, origenR: 0, origenL: 0 },
+      };
+      let origenP = 0, origenR = 0, origenL = 0;
       (live.ops || []).forEach((o) => {
         const m = num(o.monto);
-        if (o.tipo === "carga") { ventasTotal += m; stockDelta[o.plataforma] -= m + num(o.bono); porPlataforma[o.plataforma].ventas += m; porPlataforma[o.plataforma].bono += num(o.bono); }
-        else { retirosTotal += m; stockDelta[o.plataforma] += m; porPlataforma[o.plataforma].premios += m; }
+        if (o.tipo === "carga") {
+          ventasTotal += m; stockDelta[o.plataforma] -= m + num(o.bono); porPlataforma[o.plataforma].ventas += m; porPlataforma[o.plataforma].bono += num(o.bono); porPlataforma[o.plataforma].cargasCount++;
+          if (o.origen === "nuevo") { origenP++; porPlataforma[o.plataforma].origenP++; }
+          else if (o.origen === "derivado") { origenR++; porPlataforma[o.plataforma].origenR++; }
+          else if (o.origen === "lista") { origenL++; porPlataforma[o.plataforma].origenL++; }
+        }
+        else { retirosTotal += m; stockDelta[o.plataforma] += m; porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
       });
       const bajadasTotal = (live.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
       const bajadasFichas = (live.bajadas || []).filter((b) => b.destino === "Compra de fichas").reduce((s, b) => s + num(b.monto), 0);
@@ -367,6 +386,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
         bajadasTotal, bajadasFichas, bajadasGasto, bajadasEfectivo,
         contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: (live.ops || []).length, opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
+        origenP, origenR, origenL, mensajesPublicidad: publicidadByShift[live.id] || 0,
       };
     }
     if (shifts.length) {
@@ -379,10 +399,11 @@ export default function AdminDashboard({ adminPin, onExit }) {
         bajadasTotal: c.bajadasTotal, bajadasFichas: c.bajadasFichas, bajadasGasto: c.bajadasGasto, bajadasEfectivo: c.bajadasEfectivo,
         contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: c.cargasCount + c.retirosCount, opsCount: (last.ops || []).length, ops: last.ops || [],
+        origenP: c.nuevos, origenR: c.derivados, origenL: c.cargasLista, mensajesPublicidad: publicidadByShift[last.id] || 0,
       };
     }
     return null;
-  }, [liveShifts, shifts, empTodayBaseStats]);
+  }, [liveShifts, shifts, empTodayBaseStats, publicidadByShift]);
 
   if (loading) return <p className="text-slate-500 text-sm text-center mt-16">Cargando panel...</p>;
 
@@ -485,6 +506,12 @@ export default function AdminDashboard({ adminPin, onExit }) {
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.contestaron}</p><p className="text-[9px] text-slate-500 uppercase">Contestaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.cargaron}</p><p className="text-[9px] text-slate-500 uppercase">Cargaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.movimientos}</p><p className="text-[9px] text-slate-500 uppercase">Movimientos (cargas+retiros)</p></div>
+              </div>
+              <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-white/5">
+                <div className="text-center"><p className="text-lg font-black text-indigo-300">{ahoraMismo.mensajesPublicidad}</p><p className="text-[9px] text-slate-500 uppercase">Msj. publicidad</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenP}</p><p className="text-[9px] text-slate-500 uppercase">P · Nuevo</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenR}</p><p className="text-[9px] text-slate-500 uppercase">R · Referido</p></div>
+                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenL}</p><p className="text-[9px] text-slate-500 uppercase">L · Lista</p></div>
               </div>
             </Card>
           )}
@@ -1118,6 +1145,7 @@ function PlataformaBreakdown({ porPlataforma }) {
       {PLATFORMS.map((p) => {
         const d = porPlataforma[p.key];
         const neto = d.ventas - d.premios;
+        const ticketProm = d.cargasCount ? Math.round(d.ventas / d.cargasCount) : 0;
         return (
           <div key={p.key} className="bg-white/5 rounded-lg p-2 text-[10px]">
             <p className="text-slate-500 uppercase font-bold mb-1">{p.label}</p>
@@ -1125,6 +1153,14 @@ function PlataformaBreakdown({ porPlataforma }) {
             <div className="flex justify-between"><span className="text-slate-500">Premios</span><span className="font-bold text-rose-400">{money(d.premios)}</span></div>
             {d.bono !== undefined && <div className="flex justify-between"><span className="text-slate-500">Bono dado</span><span className="font-bold text-amber-400">{money(d.bono)}</span></div>}
             <div className="flex justify-between border-t border-white/10 mt-1 pt-1"><span className="text-slate-400 font-semibold">Neto</span><span className={`font-black ${neto >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{money(neto)}</span></div>
+            {d.cargasCount !== undefined && (
+              <>
+                <div className="flex justify-between border-t border-white/10 mt-1 pt-1"><span className="text-slate-500">Depósitos</span><span className="font-bold">{d.cargasCount}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Retiros</span><span className="font-bold">{d.retirosCount}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Ticket promedio</span><span className="font-bold">{money(ticketProm)}</span></div>
+                <div className="flex justify-between border-t border-white/10 mt-1 pt-1"><span className="text-slate-500">Origen P / R / L</span><span className="font-bold">{d.origenP} / {d.origenR} / {d.origenL}</span></div>
+              </>
+            )}
           </div>
         );
       })}
