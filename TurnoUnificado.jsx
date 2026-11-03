@@ -162,7 +162,7 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
             <div key={p.key} className="bg-black/20 rounded-lg px-2.5 py-2">
               <p className="text-[9px] text-slate-500 uppercase mb-0.5">Fichas {p.label} — inicio</p>
               <p className="text-sm font-bold">{money(num(stockInicio[p.key] || 0))}</p>
-              <p className="text-[10px] text-indigo-300 font-bold">Esperado ahora: {money(expected.stock[p.key])}</p>
+              {p.key === "B" && <p className="text-[10px] text-indigo-300 font-bold">Esperado ahora: {money(expected.stock[p.key])}</p>}
             </div>
           ))}
         </div>
@@ -237,14 +237,14 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
         <Field label="BET — cierre (informado a mano)">
           <input
             inputMode="numeric" value={stockCierreInf.B}
-            onChange={(e) => setStockCierreInf({ ...stockCierreInf, B: e.target.value.replace(/[^\d]/g, "") })}
+            onChange={(e) => setStockCierreInf({ ...stockCierreInf, B: formatMiles(e.target.value) })}
             placeholder="0" className="input"
           />
         </Field>
         <Field label="GANA — saldo que ves ahora en Ganamos (opcional)">
           <input
             inputMode="numeric" value={stockCierreInf.G_reportado || ""}
-            onChange={(e) => setStockCierreInf({ ...stockCierreInf, G_reportado: e.target.value.replace(/[^\d]/g, "") })}
+            onChange={(e) => setStockCierreInf({ ...stockCierreInf, G_reportado: formatMiles(e.target.value) })}
             placeholder="0" className="input"
           />
         </Field>
@@ -252,18 +252,12 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
       </Card>
 
       {cierreCheck.anyCierreData && (
-        <Card icon={<CheckCircle2 size={15} />} title="Control de cierre" subtitle="Efectivo y fichas de Bet — lo único que contás vos">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-black/20 rounded-xl p-2.5 text-center">
-              <p className="text-[10px] text-slate-500 mb-1">Efectivo</p>
-              <Badge ok={Math.abs(cierreCheck.diffEfectivo) < 1} textBad={`Dif. ${money(cierreCheck.diffEfectivo)}`} />
-            </div>
-            <div className="bg-black/20 rounded-xl p-2.5 text-center">
-              <p className="text-[10px] text-slate-500 mb-1">Fichas BET</p>
-              <Badge ok={Math.abs(cierreCheck.diffFichas.B) < 1} textBad={`Dif. ${money(cierreCheck.diffFichas.B)}`} />
-            </div>
+        <Card icon={<CheckCircle2 size={15} />} title="Control de cierre" subtitle="Fichas de Bet — lo único que se verifica acá">
+          <div className="bg-black/20 rounded-xl p-2.5 text-center">
+            <p className="text-[10px] text-slate-500 mb-1">Fichas BET</p>
+            <Badge ok={Math.abs(cierreCheck.diffFichas.B) < 1} textBad={`Dif. ${money(cierreCheck.diffFichas.B)}`} />
           </div>
-          <p className="text-[10px] text-slate-600 mt-2">Las fichas de Ganamos las verifica tu encargado aparte, con el saldo real de la plataforma.</p>
+          <p className="text-[10px] text-slate-600 mt-2">El efectivo y las fichas de Ganamos los verifica tu encargado aparte.</p>
         </Card>
       )}
 
