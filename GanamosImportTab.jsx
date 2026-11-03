@@ -118,6 +118,23 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
     }
   }
 
+  // Asigna de una todas las operaciones "sin turno" actuales a su turno anterior o
+  // siguiente respectivo (cada una al suyo, no a un turno fijo) — para no tener que
+  // clickear una por una cuando hay muchas en el mismo hueco.
+  function asignarTodasSinTurno(direccion) {
+    if (!resumen) return;
+    setAsignacionManual((prev) => {
+      const next = { ...prev };
+      resumen.sinTurno.forEach((f) => {
+        if (direccion === null) { delete next[f.tx]; return; }
+        const { anterior, siguiente } = turnosAdyacentes(f.fecha, shiftsCerrados);
+        const elegido = direccion === "anterior" ? anterior : siguiente;
+        if (elegido) next[f.tx] = elegido.id;
+      });
+      return next;
+    });
+  }
+
   async function cargarUsuarios() {
     const { data } = await supabase.rpc("admin_get_ganamos_usuarios", { input_admin_pin: adminPin });
     const map = {};
@@ -293,6 +310,14 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
 
           {resumen.sinTurno.length > 0 && (
             <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.sinTurno.length} operación(es) sin turno cerrado que las cubra`} subtitle="Elegí vos a cuál turno entra cada una, o dejala afuera — por defecto no se importa ninguna">
+              {resumen.sinTurno.length > 1 && (
+                <div className="flex gap-1.5 flex-wrap mb-2.5 pb-2.5 border-b border-white/10">
+                  <span className="text-[10px] text-slate-500 self-center mr-0.5">Asignar todas:</span>
+                  <button onClick={() => asignarTodasSinTurno(null)} className="text-[10px] rounded-lg px-2 py-1 font-bold bg-white/10 text-slate-300">Ninguna (no importar)</button>
+                  <button onClick={() => asignarTodasSinTurno("anterior")} className="text-[10px] rounded-lg px-2 py-1 font-bold bg-indigo-500/20 text-indigo-300">Todas a su turno anterior</button>
+                  <button onClick={() => asignarTodasSinTurno("siguiente")} className="text-[10px] rounded-lg px-2 py-1 font-bold bg-indigo-500/20 text-indigo-300">Todas a su turno siguiente</button>
+                </div>
+              )}
               <div className="space-y-2">
                 {resumen.sinTurno.slice(0, 20).map((f, i) => {
                   const { anterior, siguiente } = turnosAdyacentes(f.fecha, shiftsCerrados);
