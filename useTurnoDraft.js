@@ -180,6 +180,12 @@ export function useTurnoDraft(identity) {
     opsFilled.forEach((o) => {
       const m = num(o.monto);
       if (o.tipo === "carga") { porPlataforma[o.plataforma].carga += m; porPlataforma[o.plataforma].bono += num(o.bono); }
+      else if (o.tipo === "registro_rapido") {
+        // Carga rápida (origen + monto, sin plataforma propia) — hoy solo se opera con
+        // Ganamos, así que cuenta directo para G. Reduce las fichas esperadas igual que
+        // una carga normal, para que el empleado siga teniendo una referencia en vivo.
+        porPlataforma.G.carga += m;
+      }
       else porPlataforma[o.plataforma].retiro += m;
     });
     const res = {};
