@@ -51,9 +51,11 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
     const { filas, errores } = parseGanamosTabla(texto);
     const conTurno = filas.map((f) => ({ ...f, shift: matchShift(f.fecha, shiftsCerrados) }));
     setParsed({ filas: conTurno, errores });
-    // Precarga el borrador con los usuarios nuevos que aparecen, para que se vean los inputs de una.
+    // Precarga el borrador con los usuarios nuevos que aparecen, con el nombre ya puesto
+    // igual al usuario de Ganamos (así se guarda tal cual, sin pedir el nombre real) — solo
+    // falta elegir el origen P/R/L de cada uno.
     const borrador = {};
-    conTurno.forEach((f) => { if (!usuarios[f.usuario] && !borrador[f.usuario]) borrador[f.usuario] = { cliente: "", origen: null }; });
+    conTurno.forEach((f) => { if (!usuarios[f.usuario] && !borrador[f.usuario]) borrador[f.usuario] = { cliente: f.usuario, origen: null }; });
     setNuevosUsuarios(borrador);
   }
 
@@ -179,7 +181,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
           )}
 
           {resumen.porUsuarioFaltante.length > 0 && (
-            <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.porUsuarioFaltante.length} usuario(s) de Ganamos nuevo(s)`} subtitle="Ponele nombre y origen una sola vez — las próximas veces ya quedan reconocidos solos">
+            <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.porUsuarioFaltante.length} usuario(s) de Ganamos nuevo(s)`} subtitle="Se guardan con su usuario de Ganamos como nombre — solo falta el origen de cada uno">
               <div className="space-y-2">
                 {resumen.porUsuarioFaltante.map((u) => (
                   <div key={u} className="bg-white/5 rounded-lg p-2.5">
@@ -190,11 +192,6 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
                         onChange={(e) => actualizarBorrador(u, "cliente", e.target.value)}
                         placeholder="Nombre del cliente" className="flex-1 bg-black/20 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
-                      {!nuevosUsuarios[u]?.cliente && (
-                        <button onClick={() => actualizarBorrador(u, "cliente", u)} title="Usar el usuario de Ganamos como nombre, por ahora" className="text-[10px] text-slate-500 underline flex-none self-center">
-                          usar "{u}"
-                        </button>
-                      )}
                       <div className="flex gap-1">
                         {ORIGEN_OPCIONES.map(([key, letra, label]) => (
                           <button
