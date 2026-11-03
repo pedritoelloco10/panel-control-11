@@ -180,6 +180,33 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
     return [...vistos.values()];
   }, [resumen]);
 
+  // Si las filas traen el saldo-después de cada operación (columna nueva del formato),
+  // se sugiere solo el saldo de cierre de cada turno: el de la operación más tardía que
+  // le quedó asignada. Sigue siendo editable por si hace falta corregirlo a mano.
+  const saldoSugeridoPorTurno = useMemo(() => {
+    if (!resumen) return {};
+    const masTardia = {};
+    resumen.conTurno.forEach((f) => {
+      if (f.saldoDespues == null) return;
+      const actual = masTardia[f.shift.id];
+      if (!actual || f.fecha > actual.fecha) masTardia[f.shift.id] = f;
+    });
+    const out = {};
+    Object.entries(masTardia).forEach(([shiftId, f]) => { out[shiftId] = String(Math.round(f.saldoDespues)); });
+    return out;
+  }, [resumen]);
+
+  useEffect(() => {
+    setSaldoGanaPorTurno((prev) => {
+      let cambio = false;
+      const next = { ...prev };
+      Object.entries(saldoSugeridoPorTurno).forEach(([shiftId, val]) => {
+        if (next[shiftId] === undefined) { next[shiftId] = val; cambio = true; }
+      });
+      return cambio ? next : prev;
+    });
+  }, [saldoSugeridoPorTurno]);
+
   async function confirmarImportacion() {
     if (!resumen || resumen.conTurno.length === 0) return;
     setImportando(true);
@@ -246,7 +273,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
         </p>
         <textarea
           value={texto} onChange={(e) => setTexto(e.target.value)}
-          placeholder={"Pegá acá el texto, una operación por línea:\nTX | FECHA_HORA | TIPO | USUARIO | MONTO"}
+          placeholder={"Pegá acá el texto, una operación por línea:\nTX | FECHA_HORA | TIPO | USUARIO | MONTO | SALDO_DESPUES"}
           className="w-full h-32 bg-white/5 ring-1 ring-white/10 rounded-lg p-2.5 text-[11px] font-mono mb-2 focus:outline-none focus:ring-indigo-500"
         />
         <button onClick={procesar} disabled={!texto.trim()} className="bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2 px-4 rounded-lg text-xs disabled:opacity-40">
@@ -280,16 +307,22 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
                         <button onClick={() => setAsignacionManual((p) => { const n = { ...p }; delete n[f.tx]; return n; })} className={btnClass(!elegido)}>
                           No importar
                         </button>
-                        {anterior && (
-                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: anterior.id }))} className={btnClass(elegido === anterior.id)}>
-                            Turno anterior ({anterior.responsable}, {anterior.fecha} {anterior.turno_label || ""})
-                          </button>
-                        )}
-                        {siguiente && (
-                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: siguiente.id }))} className={btnClass(elegido === siguiente.id)}>
-                            Turno siguiente ({siguiente.responsable}, {siguiente.fecha} {siguiente.turno_label || ""})
-                          </button>
-                        )}
+                        {anterior && (() => {
+                          const minutos = Math.round((f.fecha - shiftWindow(anterior).end) / 60000);
+                          return (
+                            <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: anterior.id }))} className={btnClass(elegido === anterior.id)}>
+                              Turno anterior ({anterior.responsable}, {anterior.fecha} {anterior.turno_label || ""}) · cerró hace {minutos} min
+                            </button>
+                          );
+                        })()}
+                        {siguiente && (() => {
+                          const minutos = Math.round((shiftWindow(siguiente).start - f.fecha) / 60000);
+                          return (
+                            <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: siguiente.id }))} className={btnClass(elegido === siguiente.id)}>
+                              Turno siguiente ({siguiente.responsable}, {siguiente.fecha} {siguiente.turno_label || ""}) · abre en {minutos} min
+                            </button>
+                          );
+                        })()}
                         {!anterior && !siguiente && <p className="text-[10px] text-slate-600 self-center">No hay ningún turno cerrado cerca de esta fecha.</p>}
                       </div>
                     </div>
@@ -327,7 +360,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
             );
           })}
 
-          <Card icon={<Wallet size={15} className="text-indigo-300" />} title="Saldo real de Ganamos al cierre de cada turno" subtitle='El número "Saldo" que muestra Ganamos arriba a la derecha — así el control de fichas GANA compara contra algo real, no contra una estimación'>
+          <Card icon={<Wallet size={15} className="text-indigo-300" />} title="Saldo real de Ganamos al cierre de cada turno" subtitle="Se completa solo con el saldo de la última operación pegada — revisalo y corregilo si hace falta">
             <div className="space-y-2">
               {shiftsAImportar.map((shift) => (
                 <div key={shift.id} className="flex items-center gap-2">
@@ -339,7 +372,10 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
                       className="w-full bg-black/20 rounded-lg px-2.5 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                     {saldoGanaPorTurno[shift.id] && (
-                      <p className="text-[10px] text-slate-500 text-right mt-0.5">= {money(Math.round(num(saldoGanaPorTurno[shift.id])))}</p>
+                      <p className="text-[10px] text-slate-500 text-right mt-0.5">
+                        = {money(Math.round(num(saldoGanaPorTurno[shift.id])))}
+                        {saldoSugeridoPorTurno[shift.id] === saldoGanaPorTurno[shift.id] && <span className="text-indigo-400"> (auto)</span>}
+                      </p>
                     )}
                   </div>
                 </div>
