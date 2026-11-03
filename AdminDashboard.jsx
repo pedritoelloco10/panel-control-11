@@ -456,7 +456,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
           <div className="flex items-center justify-between bg-white/[0.03] ring-1 ring-white/5 rounded-xl px-3 py-2 mb-3">
             <div className="flex items-center gap-2">
               <button onClick={loadAll} className="text-[11px] font-bold text-indigo-300 flex items-center gap-1"><Sparkles size={12} /> Actualizar ahora</button>
-              {lastUpdated && <span className="text-[10px] text-slate-600">actualizado {lastUpdated.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>}
+              {lastUpdated && <span className="text-[10px] text-slate-600">actualizado {lastUpdated.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}</span>}
             </div>
             <button onClick={() => setAutoRefresh(!autoRefresh)} className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${autoRefresh ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-slate-500"}`}>
               {autoRefresh ? "Auto: ON" : "Auto: OFF"}
@@ -540,7 +540,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
               <Card
                 key={r.id}
                 icon={<Users size={15} />} title="Ahora mismo — refuerzo"
-                subtitle={`${r.empleado} · en bases desde las ${new Date(r.inicio).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`}
+                subtitle={`${r.empleado} · en bases desde las ${new Date(r.inicio).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`}
                 right={<span className="text-[9px] bg-emerald-500/15 text-emerald-400 rounded-full px-2 py-0.5 font-bold animate-pulse">EN VIVO</span>}
               >
                 <div className="grid grid-cols-3 gap-2">
@@ -569,8 +569,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> {s.nombre}
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      entró {new Date(s.entro_a).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
-                      {" · vence "}{new Date(s.vence_a).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                      entró {new Date(s.entro_a).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                      {" · vence "}{new Date(s.vence_a).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}
                     </span>
                   </div>
                 ))}
@@ -587,7 +587,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
                       {a.tipo === "admin" ? "🔒 Admin" : a.nombre}
                     </span>
                     <span className="text-slate-400">
-                      {new Date(a.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {new Date(a.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}
                     </span>
                   </div>
                 ))}
@@ -838,7 +838,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
                         <div>
                           <p className="text-xs font-bold">{r.empleado}</p>
                           <p className="text-[10px] text-slate-500">
-                            {inicio.toLocaleDateString("es-AR")} · {inicio.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} → {fin.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                            {inicio.toLocaleDateString("es-AR")} · {inicio.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })} → {fin.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}
                           </p>
                         </div>
                         <span className="text-[10px] font-bold text-slate-400">{duracion}</span>
@@ -1830,7 +1830,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
           <div className="max-h-72 overflow-y-auto space-y-1">
             {events.length === 0 && <p className="text-slate-600 text-xs italic">Sin actividad registrada.</p>}
             {events.map((ev) => (
-              <p key={ev.id} className="text-[10px] text-slate-400">{new Date(ev.created_at).toLocaleString("es-AR")} · <span className="text-slate-300 font-semibold">{ev.empleado}</span> · {ev.accion}</p>
+              <p key={ev.id} className="text-[10px] text-slate-400">{new Date(ev.created_at).toLocaleString("es-AR", { hour12: false })} · <span className="text-slate-300 font-semibold">{ev.empleado}</span> · {ev.accion}</p>
             ))}
           </div>
         </Card>

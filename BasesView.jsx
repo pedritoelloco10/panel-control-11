@@ -225,7 +225,7 @@ export default function BasesView({ identity, onLogout }) {
       {!errMsg && (
         <>
           {refuerzo && (
-            <Card icon={<Users size={15} />} title="Estás como refuerzo" subtitle={`Desde las ${new Date(refuerzo.inicio).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`}>
+            <Card icon={<Users size={15} />} title="Estás como refuerzo" subtitle={`Desde las ${new Date(refuerzo.inicio).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`}>
               <p className="text-slate-400 text-xs mb-2.5">Ya hay una caja principal abierta con otra persona — vos estás 100% en bases, con un cupo propio de {cupo} contactos.</p>
               <button onClick={cerrarSesion} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2 rounded-xl text-xs">
                 Cerrar sesión
@@ -459,7 +459,7 @@ export default function BasesView({ identity, onLogout }) {
                               ) : (
                                 historyEvents.map((ev) => (
                                   <p key={ev.id} className="text-[9px] text-slate-400">
-                                    {new Date(ev.created_at).toLocaleString("es-AR")} · <span className="text-slate-300 font-semibold">{ev.empleado}</span> · {ev.accion}
+                                    {new Date(ev.created_at).toLocaleString("es-AR", { hour12: false })} · <span className="text-slate-300 font-semibold">{ev.empleado}</span> · {ev.accion}
                                   </p>
                                 ))
                               )}
