@@ -147,3 +147,51 @@ export function parseGanamosTabla(texto) {
   });
   return { filas, errores };
 }
+
+// Cruza lo que el empleado anotó en vivo (origen + monto, sin saber el usuario de Ganamos)
+// contra las filas ya parseadas de Ganamos para ESE turno, para validar que el bono que dio
+// la plataforma coincide con lo que corresponde según el origen.
+//   - "nuevo" (P): regla estricta, tiene que haber ~50% de bono.
+//   - "derivado" (R) y "lista" (L): todavía no hay un % único y fijo (depende de otros
+//     factores que no vemos acá) — se muestra el % real encontrado, sin marcar error.
+const ORIGEN_BONO_ESPERADO = { nuevo: 0.5 };
+const TOLERANCIA_PORCENTUAL = 0.02; // 2 puntos porcentuales de margen
+const TOLERANCIA_MINUTOS = 60;
+
+export function cruzarRegistrosConGanamos(registros, filasGanamosDelTurno) {
+  const cargas = filasGanamosDelTurno.filter((f) => f.tipo === "carga");
+  const bonos = filasGanamosDelTurno.filter((f) => f.tipo === "bono");
+
+  return registros.map((r) => {
+    const montoR = num(r.monto);
+    const horaR = new Date(r.hora);
+    let mejor = null, mejorDif = Infinity;
+    cargas.forEach((c) => {
+      if (num(c.monto) !== montoR) return;
+      const dif = Math.abs(c.fecha.getTime() - horaR.getTime());
+      if (dif < mejorDif) { mejor = c; mejorDif = dif; }
+    });
+    if (!mejor || mejorDif > TOLERANCIA_MINUTOS * 60 * 1000) {
+      return { ...r, estado: "sin_match", usuario: null, detalle: "No se encontró en Ganamos una carga de ese monto cerca de esa hora." };
+    }
+
+    const bonoReal = bonos.find((b) => b.usuario === mejor.usuario);
+    const bonoRealMonto = bonoReal ? num(bonoReal.monto) : 0;
+    const bonoRealPct = montoR ? bonoRealMonto / montoR : 0;
+    const pctEsperado = ORIGEN_BONO_ESPERADO[r.origen];
+
+    if (pctEsperado == null) {
+      return {
+        ...r, estado: "ok", usuario: mejor.usuario, bonoRealPct,
+        detalle: bonoReal ? `Bono encontrado: ${Math.round(bonoRealPct * 100)}%` : "Sin bono registrado en Ganamos",
+      };
+    }
+    if (!bonoReal || Math.abs(bonoRealPct - pctEsperado) > TOLERANCIA_PORCENTUAL) {
+      return {
+        ...r, estado: "revisar", usuario: mejor.usuario, bonoRealPct,
+        detalle: bonoReal ? `Bono real ${Math.round(bonoRealPct * 100)}%, se esperaba ${Math.round(pctEsperado * 100)}%` : `Falta el bono del ${Math.round(pctEsperado * 100)}%`,
+      };
+    }
+    return { ...r, estado: "ok", usuario: mejor.usuario, bonoRealPct, detalle: `Bono correcto (${Math.round(bonoRealPct * 100)}%)` };
+  });
+}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card } from "./ui";
 import { supabase } from "./supabaseClient";
-import { num, formatMiles, money, parseGanamosTabla } from "./lib";
+import { num, formatMiles, money, parseGanamosTabla, cruzarRegistrosConGanamos } from "./lib";
 
 const ORIGEN_OPCIONES = [
   ["nuevo", "P", "Publicidad"],
@@ -70,6 +70,22 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
     return { sinTurno, conTurno, porUsuarioFaltante, faltanDatos };
   }, [parsed, usuarios, nuevosUsuarios]);
 
+  // Cruza, por turno, lo que el empleado anotó en vivo (tipo "registro_rapido" dentro de
+  // shift.ops) contra lo que trajo Ganamos para ese mismo turno — valida el % de bono según
+  // el origen que marcó el empleado. Si todavía no existe la pantalla de carga rápida del
+  // empleado, esto simplemente no muestra nada (no hay registros que cruzar).
+  const cruces = useMemo(() => {
+    if (!resumen) return [];
+    const porShiftId = {};
+    resumen.conTurno.forEach((f) => { (porShiftId[f.shift.id] ||= []).push(f); });
+    return Object.entries(porShiftId).map(([shiftId, filas]) => {
+      const shift = filas[0].shift;
+      const registros = (shift.ops || []).filter((o) => o.tipo === "registro_rapido");
+      if (registros.length === 0) return null;
+      return { shift, resultados: cruzarRegistrosConGanamos(registros, filas) };
+    }).filter(Boolean);
+  }, [resumen]);
+
   async function confirmarImportacion() {
     if (!resumen || resumen.conTurno.length === 0) return;
     setImportando(true);
@@ -93,7 +109,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
         if (!porTurno[id]) porTurno[id] = [];
         porTurno[id].push({
           tipo: f.tipo, plataforma: "G", monto: formatMiles(String(Math.round(f.monto))), bono: "0",
-          cliente: datos.cliente, origen: f.tipo === "carga" ? datos.origen : null, ganamos_tx: f.tx,
+          cliente: datos.cliente, origen: f.tipo === "carga" ? datos.origen : null, ganamos_tx: f.tx, usuario: f.usuario,
         });
       });
 
@@ -183,6 +199,27 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
               </div>
             </Card>
           )}
+
+          {cruces.map(({ shift, resultados }) => {
+            const revisar = resultados.filter((r) => r.estado !== "ok");
+            return (
+              <Card
+                key={shift.id}
+                icon={revisar.length > 0 ? <AlertTriangle size={15} className="text-amber-400" /> : <CheckCircle2 size={15} className="text-emerald-400" />}
+                title={`Cruce con lo que anotó el empleado — ${shift.fecha} ${shift.turno_label || ""}`}
+                subtitle={`${shift.responsable} · ${resultados.length - revisar.length}/${resultados.length} OK`}
+              >
+                <div className="space-y-1.5">
+                  {resultados.map((r, i) => (
+                    <div key={i} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${r.estado === "ok" ? "bg-white/5" : "bg-amber-500/10 ring-1 ring-amber-500/30"}`}>
+                      <span className="text-slate-400">{ORIGEN_OPCIONES.find(([k]) => k === r.origen)?.[1] || "?"} · {money(num(r.monto))} · {new Date(r.hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className={r.estado === "ok" ? "text-emerald-400" : "text-amber-400 font-bold"}>{r.detalle}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
 
           <Card icon={<CheckCircle2 size={15} className="text-emerald-400" />} title={`${resumen.conTurno.length} operación(es) listas para importar`} subtitle={`En ${new Set(resumen.conTurno.map((f) => f.shift.id)).size} turno(s)`}>
             <button

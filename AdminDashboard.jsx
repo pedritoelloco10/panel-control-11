@@ -43,6 +43,10 @@ function computeShift(shift) {
       // Bono importado de Ganamos como operación propia (no atado a una carga puntual) —
       // reduce el stock esperado igual que el campo o.bono de una carga manual.
       if (porPlataforma[o.plataforma]) porPlataforma[o.plataforma].bono += m;
+    } else if (o.tipo === "registro_rapido") {
+      // Lo que el empleado anota en vivo (origen + monto, sin plataforma) — no es plata real
+      // todavía, así que NO suma a ventas/retiros/origen acá (eso ya lo trae la importación de
+      // Ganamos y contaría dos veces). Solo sirve de insumo para el cruce de reconciliación.
     } else {
       retirosTotal += m; retirosCount++;
       if (porPlataforma[o.plataforma]) { porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
@@ -94,6 +98,7 @@ function computeShift(shift) {
 function tipoOpLabel(tipo) {
   if (tipo === "carga") return { label: "Venta", className: "text-emerald-400" };
   if (tipo === "bono") return { label: "Bono", className: "text-amber-400" };
+  if (tipo === "registro_rapido") return { label: "Registro rápido", className: "text-indigo-300" };
   return { label: "Premio", className: "text-rose-400" };
 }
 
@@ -379,6 +384,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
           else if (o.origen === "lista") { origenL++; porPlataforma[o.plataforma].origenL++; }
         }
         else if (o.tipo === "bono") { stockDelta[o.plataforma] -= m; porPlataforma[o.plataforma].bono += m; }
+        else if (o.tipo === "registro_rapido") { /* no es plata real todavía, no mueve stock — ver nota en computeShift */ }
         else { retirosTotal += m; stockDelta[o.plataforma] += m; porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
       });
       const bajadasTotal = (live.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
@@ -2034,7 +2040,7 @@ function ClientesRanking({ computedAll }) {
       if (dateTo && s.fecha > dateTo) return;
       (s.ops || []).forEach((o) => {
         const cliente = (o.cliente || "").trim();
-        if (!cliente || o.tipo === "bono") return; // el bono no es ni carga ni premio del cliente, se deja afuera de este ranking
+        if (!cliente || o.tipo === "bono" || o.tipo === "registro_rapido") return; // ninguno de los dos es carga/premio real del cliente, se dejan afuera de este ranking
         const m = num(o.monto);
         if (!map[cliente]) map[cliente] = { cargas: 0, premios: 0, ops: 0, ultima: s.fecha };
         if (o.tipo === "carga") map[cliente].cargas += m; else map[cliente].premios += m;
