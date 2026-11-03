@@ -24,6 +24,20 @@ function matchShift(fecha, shiftsCerrados) {
   }) || null;
 }
 
+// Para una operación que no cae dentro de ningún turno (ej. un hueco entre el cierre de
+// uno y la apertura del siguiente), ofrece los dos turnos más cercanos a mano: el que
+// cerró justo antes y el que arrancó justo después.
+function turnosAdyacentes(fecha, shiftsCerrados) {
+  let anterior = null, anteriorFin = null;
+  let siguiente = null, siguienteInicio = null;
+  shiftsCerrados.forEach((s) => {
+    const { start, end } = shiftWindow(s);
+    if (end <= fecha && (!anteriorFin || end > anteriorFin)) { anterior = s; anteriorFin = end; }
+    if (start >= fecha && (!siguienteInicio || start < siguienteInicio)) { siguiente = s; siguienteInicio = start; }
+  });
+  return { anterior, siguiente };
+}
+
 // El admin ya NO elige el origen al importar — eso lo anota el empleado en su pantalla
 // (carga rápida P/R/L). Acá solo se cruza contra lo que el empleado ya cargó para ese
 // turno; si no hay match, la operación queda sin origen (se puede completar después).
@@ -40,6 +54,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
   const [parsed, setParsed] = useState(null); // { filas, errores }
   const [importando, setImportando] = useState(false);
   const [resultado, setResultado] = useState(null);
+  const [asignacionManual, setAsignacionManual] = useState({}); // tx -> shiftId (para las que no matchean solas)
 
   async function cargarUsuarios() {
     const { data } = await supabase.rpc("admin_get_ganamos_usuarios", { input_admin_pin: adminPin });
@@ -53,18 +68,30 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
 
   function procesar() {
     setResultado(null);
+    setAsignacionManual({});
     const { filas, errores } = parseGanamosTabla(texto);
     const conTurno = filas.map((f) => ({ ...f, shift: matchShift(f.fecha, shiftsCerrados) }));
     setParsed({ filas: conTurno, errores });
   }
 
+  const shiftsCerradosPorId = useMemo(() => {
+    const map = {};
+    shiftsCerrados.forEach((s) => { map[s.id] = s; });
+    return map;
+  }, [shiftsCerrados]);
+
   const resumen = useMemo(() => {
     if (!parsed) return null;
-    const sinTurno = parsed.filas.filter((f) => !f.shift);
-    const conTurno = parsed.filas.filter((f) => f.shift);
+    const resueltas = parsed.filas.map((f) => {
+      if (f.shift) return f;
+      const asignado = asignacionManual[f.tx];
+      return asignado ? { ...f, shift: shiftsCerradosPorId[asignado] || null } : f;
+    });
+    const sinTurno = resueltas.filter((f) => !f.shift);
+    const conTurno = resueltas.filter((f) => f.shift);
     const usuariosNuevos = [...new Set(conTurno.filter((f) => !usuarios[f.usuario]).map((f) => f.usuario))];
     return { sinTurno, conTurno, usuariosNuevos };
-  }, [parsed, usuarios]);
+  }, [parsed, usuarios, asignacionManual, shiftsCerradosPorId]);
 
   // Cruza, por turno, lo que el empleado anotó en vivo (tipo "registro_rapido" dentro de
   // shift.ops) contra lo que trajo Ganamos para ese mismo turno — valida el % de bono según
@@ -126,7 +153,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
         turnos: ok.length, importadas: totalImportadas, duplicadas: totalIntentadas - totalImportadas,
         fallidas: fallidas.length, errorDetalle: fallidas[0]?.error?.message,
       });
-      setTexto(""); setParsed(null);
+      setTexto(""); setParsed(null); setAsignacionManual({});
       await cargarUsuarios();
       onImported && onImported();
     } finally {
@@ -162,12 +189,32 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
           )}
 
           {resumen.sinTurno.length > 0 && (
-            <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.sinTurno.length} operación(es) sin turno cerrado que las cubra`} subtitle="No se van a importar — revisá que ese turno ya esté cerrado en el sistema">
-              <div className="space-y-1 text-[10px] text-slate-500">
-                {resumen.sinTurno.slice(0, 20).map((f, i) => (
-                  <p key={i}>{f.fecha.toLocaleString("es-AR")} · {TIPO_LABEL[f.tipo]} · {f.usuario} · {money(f.monto)}</p>
-                ))}
-                {resumen.sinTurno.length > 20 && <p>...y {resumen.sinTurno.length - 20} más.</p>}
+            <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.sinTurno.length} operación(es) sin turno cerrado que las cubra`} subtitle="Elegí a qué turno cargarlas, o dejalas afuera">
+              <div className="space-y-2">
+                {resumen.sinTurno.slice(0, 20).map((f, i) => {
+                  const { anterior, siguiente } = turnosAdyacentes(f.fecha, shiftsCerrados);
+                  return (
+                    <div key={i} className="bg-white/5 rounded-lg p-2.5">
+                      <p className="text-[11px] text-slate-300 mb-1.5">
+                        {f.fecha.toLocaleString("es-AR")} · {TIPO_LABEL[f.tipo]} · {f.usuario} · {money(f.monto)}
+                      </p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {anterior && (
+                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: anterior.id }))} className="text-[10px] bg-indigo-500/20 text-indigo-300 rounded-lg px-2 py-1 font-bold">
+                            Cargar al turno anterior ({anterior.responsable}, {anterior.fecha} {anterior.turno_label || ""})
+                          </button>
+                        )}
+                        {siguiente && (
+                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: siguiente.id }))} className="text-[10px] bg-indigo-500/20 text-indigo-300 rounded-lg px-2 py-1 font-bold">
+                            Cargar al turno siguiente ({siguiente.responsable}, {siguiente.fecha} {siguiente.turno_label || ""})
+                          </button>
+                        )}
+                        {!anterior && !siguiente && <p className="text-[10px] text-slate-600">No hay ningún turno cerrado cerca de esta fecha.</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {resumen.sinTurno.length > 20 && <p className="text-[10px] text-slate-500">...y {resumen.sinTurno.length - 20} más.</p>}
               </div>
             </Card>
           )}
