@@ -3,10 +3,9 @@ import { Lock, Sparkles, X, ArrowLeft, Flame } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { useTurnoDraft } from "./useTurnoDraft";
 import EmployeePinGate from "./EmployeePinGate";
-import TurnoForm from "./TurnoForm";
-import OperacionesTab from "./OperacionesTab";
+import TurnoUnificado from "./TurnoUnificado";
 // Bases y Admin se cargan recién al entrar a esas pestañas — un empleado
-// que solo usa Turno/Operaciones nunca descarga ese código.
+// que solo usa Turno nunca descarga ese código.
 const BasesView = lazy(() => import("./BasesView"));
 const AdminDashboard = lazy(() => import("./AdminDashboard"));
 
@@ -99,7 +98,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-gradient-to-b from-indigo-950/40 to-transparent" />
-      <TopBar view={view} setView={(v) => (v === "adminGate" && adminPin ? setView("admin") : setView(v))} opsCount={draft.opsFilledCount} urgentCount={urgentCount} identity={identity} onLogout={logout} />
+      <TopBar view={view} setView={(v) => (v === "adminGate" && adminPin ? setView("admin") : setView(v))} urgentCount={urgentCount} identity={identity} onLogout={logout} />
       <div className="max-w-5xl mx-auto px-4 pb-24 relative">
         {identity && urgentCount > 0 && view !== "bases" && (
           <button onClick={() => setView("bases")} className="w-full flex items-center gap-2 bg-rose-500/15 ring-1 ring-rose-500/40 rounded-xl px-3.5 py-2.5 mt-4 text-left animate-pulse">
@@ -109,8 +108,7 @@ export default function App() {
             </p>
           </button>
         )}
-        {view === "turno" && (identity ? <TurnoForm wallets={wallets} draft={{ ...draft, submitTurno: handleSubmit }} identity={identity} goOps={() => setView("operaciones")} /> : <EmployeePinGate onIdentify={setIdentity} />)}
-        {view === "operaciones" && (identity ? <OperacionesTab draft={draft} identity={identity} /> : <EmployeePinGate onIdentify={setIdentity} />)}
+        {view === "turno" && (identity ? <TurnoUnificado wallets={wallets} draft={{ ...draft, submitTurno: handleSubmit }} identity={identity} /> : <EmployeePinGate onIdentify={setIdentity} />)}
         {view === "bases" && (identity ? (
           <Suspense fallback={<CargandoSeccion />}>
             <BasesView identity={identity} onLogout={logout} />
@@ -133,10 +131,9 @@ export default function App() {
   );
 }
 
-function TopBar({ view, setView, opsCount, urgentCount, identity, onLogout }) {
+function TopBar({ view, setView, urgentCount, identity, onLogout }) {
   const tabs = [
     { key: "turno", label: "Turno" },
-    { key: "operaciones", label: "Operaciones", badge: opsCount },
     { key: "bases", label: "Bases", badge: urgentCount, badgeUrgent: true },
     { key: "admin", label: "Admin", icon: <Lock size={11} /> },
   ];
