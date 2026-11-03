@@ -133,16 +133,21 @@ export function parseGanamosTabla(texto) {
     const limpia = linea.trim();
     if (!limpia) return;
 
-    let tx, fechaStr, operacion, usuario, cantidadStr;
+    let tx, fechaStr, operacion, usuario, cantidadStr, saldoStr;
     if (limpia.includes("|")) {
       const celdas = limpia.split("|").map((c) => c.trim());
-      if (celdas.length !== 5) { errores.push({ linea: i + 1, texto: limpia, motivo: "se esperaban 5 campos separados por |" }); return; }
-      [tx, fechaStr, operacion, usuario, cantidadStr] = celdas;
+      // 5 campos (formato viejo, sin saldo) o 6 (con el saldo después de esa operación).
+      if (celdas.length !== 5 && celdas.length !== 6) { errores.push({ linea: i + 1, texto: limpia, motivo: "se esperaban 5 o 6 campos separados por |" }); return; }
+      [tx, fechaStr, operacion, usuario, cantidadStr, saldoStr] = celdas;
     } else {
       let celdas = limpia.split("\t").map((c) => c.trim());
       if (celdas.length < 7) celdas = limpia.split(/\s{2,}/).map((c) => c.trim());
       if (celdas.length < 7) { errores.push({ linea: i + 1, texto: limpia, motivo: "no se reconocen las columnas" }); return; }
       [tx, fechaStr, operacion, , , usuario, cantidadStr] = celdas;
+      // Tabla cruda: la última columna trae "saldo antes → saldo después" en una sola celda.
+      const ultima = celdas[celdas.length - 1];
+      const numerosSaldo = ultima.match(/[\d.,]+/g);
+      if (numerosSaldo && numerosSaldo.length >= 2) saldoStr = numerosSaldo[numerosSaldo.length - 1];
     }
     if (normalizarTexto(tx) === "transaccion" || normalizarTexto(tx) === "tx") return; // fila de encabezado
 
@@ -156,7 +161,9 @@ export function parseGanamosTabla(texto) {
     if (!monto) { errores.push({ linea: i + 1, texto: limpia, motivo: `monto inválido: "${cantidadStr}"` }); return; }
     if (!usuario) { errores.push({ linea: i + 1, texto: limpia, motivo: "sin usuario" }); return; }
 
-    filas.push({ tx, fecha, tipo, usuario, monto });
+    const saldoDespues = saldoStr ? num(saldoStr) : null;
+
+    filas.push({ tx, fecha, tipo, usuario, monto, saldoDespues: saldoDespues || null });
   });
   return { filas, errores };
 }
