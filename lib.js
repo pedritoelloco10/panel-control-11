@@ -157,15 +157,38 @@ export function parseGanamosTabla(texto) {
     const fecha = parsearFecha(fechaStr);
     if (!fecha || isNaN(fecha.getTime())) { errores.push({ linea: i + 1, texto: limpia, motivo: `fecha no reconocida: "${fechaStr}"` }); return; }
 
-    const monto = num(cantidadStr);
-    if (!monto) { errores.push({ linea: i + 1, texto: limpia, motivo: `monto inválido: "${cantidadStr}"` }); return; }
+    // Ganamos muestra el Bonus como porcentaje (ej "15%"), no en pesos — se resuelve
+    // más abajo, buscando el depósito del mismo usuario más cercano en el tiempo.
+    const esPorcentaje = /%\s*$/.test(cantidadStr || "");
+    const pctBono = esPorcentaje ? num(cantidadStr.replace("%", "")) / 100 : null;
+    const monto = esPorcentaje ? null : num(cantidadStr);
+    if (!esPorcentaje && !monto) { errores.push({ linea: i + 1, texto: limpia, motivo: `monto inválido: "${cantidadStr}"` }); return; }
     if (!usuario) { errores.push({ linea: i + 1, texto: limpia, motivo: "sin usuario" }); return; }
 
     const saldoDespues = saldoStr ? num(saldoStr) : null;
 
-    filas.push({ tx, fecha, tipo, usuario, monto, saldoDespues: saldoDespues || null });
+    filas.push({ tx, fecha, tipo, usuario, monto, saldoDespues: saldoDespues || null, pctBono, linea: i + 1, texto: limpia });
   });
-  return { filas, errores };
+
+  // Resolver los bonos que vinieron en % (no en pesos): buscar el depósito del mismo
+  // usuario más cercano en el tiempo (±30 min) y calcular el monto real.
+  const TOLERANCIA_BONO_MS = 30 * 60 * 1000;
+  filas.forEach((f) => {
+    if (f.tipo !== "bono" || f.pctBono == null) return;
+    let mejor = null, mejorDif = Infinity;
+    filas.forEach((o) => {
+      if (o.tipo !== "carga" || o.usuario !== f.usuario) return;
+      const dif = Math.abs(o.fecha.getTime() - f.fecha.getTime());
+      if (dif < mejorDif) { mejor = o; mejorDif = dif; }
+    });
+    if (mejor && mejorDif <= TOLERANCIA_BONO_MS) {
+      f.monto = Math.round(mejor.monto * f.pctBono);
+    } else {
+      errores.push({ linea: f.linea, texto: f.texto, motivo: `bono en % de "${f.usuario}" sin depósito cercano para calcular el monto en pesos` });
+    }
+  });
+
+  return { filas: filas.filter((f) => f.monto != null), errores };
 }
 
 // Cruza lo que el empleado anotó en vivo (origen + monto, sin saber el usuario de Ganamos)
