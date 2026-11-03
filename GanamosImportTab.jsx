@@ -61,6 +61,8 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
   const [resultadoDeshacer, setResultadoDeshacer] = useState(null);
   const [ultimoLote, setUltimoLote] = useState(null); // [[shiftId, [tx1, tx2, ...]], ...] de la última importación confirmada
   const [deshaciendoLote, setDeshaciendoLote] = useState(false);
+  const [deshaciendoLotePorTurno, setDeshaciendoLotePorTurno] = useState(false);
+  const [resultadoDeshacerLote, setResultadoDeshacerLote] = useState(null);
 
   async function deshacerUltimoLote() {
     if (!ultimoLote || ultimoLote.length === 0) return;
@@ -79,15 +81,38 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
   async function deshacerImportacion() {
     if (!turnoADeshacer) return;
     const shift = shiftsCerrados.find((s) => s.id === turnoADeshacer);
-    if (!window.confirm(`¿Sacar todas las operaciones de Ganamos importadas al turno ${shift?.fecha} ${shift?.turno_label || ""} (${shift?.responsable})? Las cargas rápidas y de Bet que haya en ese turno no se tocan. Después las podés volver a importar donde corresponda.`)) return;
+    if (!window.confirm(`¿Sacar TODAS las operaciones de Ganamos importadas al turno ${shift?.fecha} ${shift?.turno_label || ""} (${shift?.responsable})? Esto incluye importaciones viejas correctas, no solo la última. Las cargas rápidas y de Bet que haya en ese turno no se tocan. Después las podés volver a importar donde corresponda.`)) return;
     setDeshaciendo(true);
     setResultadoDeshacer(null);
+    setResultadoDeshacerLote(null);
     const { data, error } = await supabase.rpc("admin_deshacer_importacion_ganamos", { input_admin_pin: adminPin, target_shift_id: turnoADeshacer });
     setDeshaciendo(false);
     if (error || data === -1 || data == null) {
       setResultadoDeshacer({ error: true, mensaje: error?.message || "No se pudo deshacer." });
     } else {
       setResultadoDeshacer({ error: false, cantidad: data });
+      setTurnoADeshacer("");
+      onImported && onImported();
+    }
+  }
+
+  // Deshace solo el último lote importado a ese turno, sin depender de lo que haya
+  // en memoria del navegador (busca en la base cuál fue la importación más reciente).
+  async function deshacerUltimoLotePorTurno() {
+    if (!turnoADeshacer) return;
+    const shift = shiftsCerrados.find((s) => s.id === turnoADeshacer);
+    if (!window.confirm(`¿Deshacer solo la última importación de Ganamos que se hizo al turno ${shift?.fecha} ${shift?.turno_label || ""} (${shift?.responsable})? Las importaciones anteriores a esa quedan intactas.`)) return;
+    setDeshaciendoLotePorTurno(true);
+    setResultadoDeshacer(null);
+    setResultadoDeshacerLote(null);
+    const { data, error } = await supabase.rpc("admin_deshacer_ultimo_lote_ganamos", { input_admin_pin: adminPin, target_shift_id: turnoADeshacer });
+    setDeshaciendoLotePorTurno(false);
+    if (error || data == null) {
+      setResultadoDeshacerLote({ error: true, mensaje: error?.message || "No se pudo deshacer." });
+    } else if (data.length === 0) {
+      setResultadoDeshacerLote({ error: true, mensaje: "Ese turno no tiene operaciones de Ganamos importadas." });
+    } else {
+      setResultadoDeshacerLote({ error: false, cantidad: data.length });
       setTurnoADeshacer("");
       onImported && onImported();
     }
@@ -366,25 +391,37 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
         </Card>
       )}
 
-      <Card icon={<RotateCcw size={15} className="text-rose-400" />} title="Deshacer una importación" subtitle="Por si se cargó al turno equivocado — saca solo las operaciones de Ganamos de ese turno, no toca el turno en sí ni lo que cargó el empleado a mano">
-        <div className="flex gap-2">
-          <select value={turnoADeshacer} onChange={(e) => setTurnoADeshacer(e.target.value)} className="flex-1 bg-black/20 rounded-lg px-2.5 py-2 text-xs">
-            <option value="">Elegí un turno...</option>
-            {shiftsCerrados.map((s) => (
-              <option key={s.id} value={s.id}>{s.fecha} · {s.turno_label || ""} · {s.responsable}</option>
-            ))}
-          </select>
+      <Card icon={<RotateCcw size={15} className="text-rose-400" />} title="Deshacer una importación" subtitle="Por si se cargó al turno equivocado — no toca el turno en sí ni lo que cargó el empleado a mano">
+        <select value={turnoADeshacer} onChange={(e) => setTurnoADeshacer(e.target.value)} className="w-full bg-black/20 rounded-lg px-2.5 py-2 text-xs">
+          <option value="">Elegí un turno...</option>
+          {shiftsCerrados.map((s) => (
+            <option key={s.id} value={s.id}>{s.fecha} · {s.turno_label || ""} · {s.responsable}</option>
+          ))}
+        </select>
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={deshacerUltimoLotePorTurno}
+            disabled={!turnoADeshacer || deshaciendoLotePorTurno}
+            className="flex-1 bg-amber-500/20 text-amber-300 font-bold px-3 py-2 rounded-lg text-xs disabled:opacity-40"
+          >
+            {deshaciendoLotePorTurno ? "Sacando..." : "Deshacer solo la última importación"}
+          </button>
           <button
             onClick={deshacerImportacion}
             disabled={!turnoADeshacer || deshaciendo}
-            className="bg-rose-500/20 text-rose-300 font-bold px-4 rounded-lg text-xs disabled:opacity-40 flex-none"
+            className="flex-1 bg-rose-500/20 text-rose-300 font-bold px-3 py-2 rounded-lg text-xs disabled:opacity-40"
           >
-            {deshaciendo ? "Sacando..." : "Deshacer"}
+            {deshaciendo ? "Sacando..." : "Deshacer TODO de Ganamos"}
           </button>
         </div>
+        {resultadoDeshacerLote && (
+          <p className={`text-xs mt-2 ${resultadoDeshacerLote.error ? "text-rose-400" : "text-emerald-400"}`}>
+            {resultadoDeshacerLote.error ? resultadoDeshacerLote.mensaje : `Se sacaron ${resultadoDeshacerLote.cantidad} operación(es) de la última importación de ese turno. Las importaciones anteriores quedaron intactas.`}
+          </p>
+        )}
         {resultadoDeshacer && (
           <p className={`text-xs mt-2 ${resultadoDeshacer.error ? "text-rose-400" : "text-emerald-400"}`}>
-            {resultadoDeshacer.error ? resultadoDeshacer.mensaje : `Se sacaron ${resultadoDeshacer.cantidad} operación(es) de Ganamos de ese turno. Ya podés reimportarlas donde corresponda.`}
+            {resultadoDeshacer.error ? resultadoDeshacer.mensaje : `Se sacaron ${resultadoDeshacer.cantidad} operación(es) de Ganamos de ese turno (todas). Ya podés reimportarlas donde corresponda.`}
           </p>
         )}
       </Card>
