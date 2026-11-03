@@ -59,6 +59,22 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
   const [turnoADeshacer, setTurnoADeshacer] = useState("");
   const [deshaciendo, setDeshaciendo] = useState(false);
   const [resultadoDeshacer, setResultadoDeshacer] = useState(null);
+  const [ultimoLote, setUltimoLote] = useState(null); // [[shiftId, [tx1, tx2, ...]], ...] de la última importación confirmada
+  const [deshaciendoLote, setDeshaciendoLote] = useState(false);
+
+  async function deshacerUltimoLote() {
+    if (!ultimoLote || ultimoLote.length === 0) return;
+    if (!window.confirm("¿Deshacer la última importación que confirmaste? Solo saca esas operaciones puntuales, no toca nada más de esos turnos.")) return;
+    setDeshaciendoLote(true);
+    const resultados = await Promise.all(ultimoLote.map(([shiftId, txIds]) =>
+      supabase.rpc("admin_quitar_operaciones_ganamos", { input_admin_pin: adminPin, target_shift_id: shiftId, tx_a_quitar: txIds })
+    ));
+    setDeshaciendoLote(false);
+    const totalSacadas = resultados.reduce((s, r) => s + (r.data > 0 ? r.data : 0), 0);
+    setResultado((prev) => ({ ...prev, deshecho: totalSacadas }));
+    setUltimoLote(null);
+    onImported && onImported();
+  }
 
   async function deshacerImportacion() {
     if (!turnoADeshacer) return;
@@ -175,15 +191,19 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
           nuevo_saldo_gana: saldoGanaPorTurno[shiftId] ? formatMiles(saldoGanaPorTurno[shiftId]) : null,
         }).then((r) => ({ shiftId, ops, ...r }))
       ));
-      const fallidas = resultados.filter((r) => r.error || r.data === -1 || r.data == null);
+      // data ahora es la lista de ganamos_tx que se agregaron de verdad (no las que ya
+      // estaban de una importación anterior) — eso es justo lo que hace falta guardar
+      // para poder deshacer ESTE lote puntual más tarde, sin tocar nada más viejo.
+      const fallidas = resultados.filter((r) => r.error || r.data == null);
       const ok = resultados.filter((r) => !fallidas.includes(r));
-      const totalImportadas = ok.reduce((s, r) => s + r.data, 0);
+      const totalImportadas = ok.reduce((s, r) => s + r.data.length, 0);
       const totalIntentadas = ok.reduce((s, r) => s + r.ops.length, 0);
 
       setResultado({
         turnos: ok.length, importadas: totalImportadas, duplicadas: totalIntentadas - totalImportadas,
         fallidas: fallidas.length, errorDetalle: fallidas[0]?.error?.message,
       });
+      setUltimoLote(ok.filter((r) => r.data.length > 0).map((r) => [r.shiftId, r.data]));
       setTexto(""); setParsed(null); setAsignacionManual({}); setSaldoGanaPorTurno({});
       await cargarUsuarios();
       onImported && onImported();
@@ -325,6 +345,18 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
             <p className="text-xs text-amber-400 mt-1.5">
               {resultado.fallidas} turno(s) no se pudieron actualizar{resultado.errorDetalle ? ` — ${resultado.errorDetalle}` : ""}. Probá de nuevo pegando la misma tabla; lo ya importado no se duplica.
             </p>
+          )}
+          {resultado.deshecho != null && (
+            <p className="text-xs text-rose-400 mt-1.5">Deshecho: se sacaron {resultado.deshecho} operación(es) de esta importación.</p>
+          )}
+          {ultimoLote && ultimoLote.length > 0 && (
+            <button
+              onClick={deshacerUltimoLote}
+              disabled={deshaciendoLote}
+              className="w-full bg-rose-500/15 text-rose-300 font-bold py-2 rounded-lg text-xs mt-2 disabled:opacity-40"
+            >
+              {deshaciendoLote ? "Deshaciendo..." : "¿Te equivocaste? Deshacer esta importación"}
+            </button>
           )}
         </Card>
       )}
