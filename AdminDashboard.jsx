@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Card, StatBox, MiniStat } from "./ui";
 import { supabase } from "./supabaseClient";
-import { PLATFORMS, FUENTE_TYPES, LEAD_STATES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno } from "./lib";
+import { PLATFORMS, FUENTE_TYPES, LEAD_STATES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno, formatMiles } from "./lib";
 import GanamosImportTab from "./GanamosImportTab";
 
 const CSV_HEADERS = [
@@ -1199,7 +1199,7 @@ function CorregirFichasInicio({ shift, adminPin, onChange }) {
 
   if (!editando) {
     return (
-      <button onClick={() => { setValor(String(num((shift.stock_inicio || {}).G) || "")); setEditando(true); }} className="text-[10px] text-indigo-300 underline mt-1">
+      <button onClick={() => { setValor(formatMiles(String(num((shift.stock_inicio || {}).G) || ""))); setEditando(true); }} className="text-[10px] text-indigo-300 underline mt-1">
         Corregir fichas GANA de inicio
       </button>
     );
@@ -1207,7 +1207,7 @@ function CorregirFichasInicio({ shift, adminPin, onChange }) {
   return (
     <div className="flex items-center gap-1.5 mt-1">
       <input
-        inputMode="numeric" value={valor} onChange={(e) => setValor(e.target.value.replace(/[^\d]/g, ""))}
+        inputMode="numeric" value={valor} onChange={(e) => setValor(formatMiles(e.target.value))}
         className="w-28 bg-black/20 rounded px-2 py-1 text-[11px]" placeholder="0" autoFocus
       />
       <button
@@ -1400,7 +1400,7 @@ function EmployeeManager({ employees, adminPin, onChange }) {
     if (!editName.trim() || (editPin.length > 0 && editPin.length !== 4)) return;
     const { data, error } = await supabase.rpc("admin_update_employee", {
       input_admin_pin: adminPin, target_id: editing, new_nombre: editName.trim(), new_pin: editPin, new_recibe_leads: editRecibeLeads,
-      new_cupo_leads: editCupoLeads.trim() === "" ? null : parseInt(editCupoLeads, 10),
+      new_cupo_leads: editCupoLeads.trim() === "" ? null : Math.round(num(editCupoLeads)),
     });
     if (error) { alert("Error al editar: " + error.message); return; }
     if (data === false) { alert("No se pudo editar — revisá el PIN de admin, o si pusiste un PIN nuevo, puede que ya lo tenga otro empleado."); return; }
@@ -1421,7 +1421,7 @@ function EmployeeManager({ employees, adminPin, onChange }) {
     if (!newName.trim() || newPin.length !== 4) return;
     const { data, error } = await supabase.rpc("admin_add_employee", {
       input_admin_pin: adminPin, new_nombre: newName.trim(), new_pin: newPin, new_recibe_leads: newRecibeLeads,
-      new_cupo_leads: newCupoLeads.trim() === "" ? null : parseInt(newCupoLeads, 10),
+      new_cupo_leads: newCupoLeads.trim() === "" ? null : Math.round(num(newCupoLeads)),
     });
     if (error) { alert("Error al agregar: " + error.message); return; }
     if (data === false) { alert("No se pudo agregar — revisá el PIN de admin, o puede que ese PIN de 4 dígitos ya lo tenga otro empleado."); return; }
@@ -1446,7 +1446,7 @@ function EmployeeManager({ employees, adminPin, onChange }) {
                     {editRecibeLeads ? "✓ Participa del reparto de leads" : "No recibe leads (ej: no manda mensajes)"}
                   </button>
                   <input
-                    value={editCupoLeads} onChange={(ev) => setEditCupoLeads(ev.target.value.replace(/\D/g, ""))}
+                    value={editCupoLeads} onChange={(ev) => setEditCupoLeads(formatMiles(ev.target.value))}
                     inputMode="numeric" placeholder="Cupo (global)"
                     className="input !py-1 w-24 text-xs text-center"
                   />
@@ -1474,7 +1474,7 @@ function EmployeeManager({ employees, adminPin, onChange }) {
           {newRecibeLeads ? "✓ El nuevo participa del reparto de leads" : "El nuevo no recibe leads"}
         </button>
         <input
-          value={newCupoLeads} onChange={(e) => setNewCupoLeads(e.target.value.replace(/\D/g, ""))}
+          value={newCupoLeads} onChange={(e) => setNewCupoLeads(formatMiles(e.target.value))}
           inputMode="numeric" placeholder="Cupo (global)"
           className="input !py-1 w-24 text-xs text-center"
         />
@@ -1569,7 +1569,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
   }, []);
 
   async function saveCupo() {
-    await supabase.rpc("admin_set_config", { input_admin_pin: adminPin, config_key: "cupo_diario_leads", config_value: String(parseInt(cupo, 10) || 35) });
+    await supabase.rpc("admin_set_config", { input_admin_pin: adminPin, config_key: "cupo_diario_leads", config_value: String(Math.round(num(cupo)) || 35) });
     setCupoSaved(true); setTimeout(() => setCupoSaved(false), 1500);
   }
 
@@ -1688,7 +1688,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         <p className="text-[10px] text-slate-600 mb-2">{FUENTE_TYPES.find((f) => f.key === newBaseFuente)?.hint}</p>
         <div className="flex gap-1.5 mb-1.5">
           <input value={newBaseName} onChange={(e) => setNewBaseName(e.target.value)} placeholder={`Base nueva (ej: Lista ${todayStr()})`} className="input flex-1 text-xs" />
-          <input value={newBaseCosto} onChange={(e) => setNewBaseCosto(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Costo (opcional)" className="input w-32 text-xs" />
+          <input value={newBaseCosto} onChange={(e) => setNewBaseCosto(formatMiles(e.target.value))} inputMode="numeric" placeholder="Costo (opcional)" className="input w-32 text-xs" />
         </div>
         <button onClick={createBase} className="w-full bg-white/5 ring-1 ring-white/10 rounded-lg px-3 py-2 flex items-center justify-center gap-1 text-xs font-bold"><Plus size={13} /> Crear</button>
       </Card>
@@ -1756,7 +1756,7 @@ function BasesAdmin({ employees, dbs, dbStats, reactivables, allContactsFlat, po
         </div>
         <p className="text-[10px] text-slate-500 mb-1.5 font-semibold">Cupo diario por empleado</p>
         <div className="flex gap-1.5">
-          <input value={cupo} onChange={(e) => setCupo(e.target.value.replace(/\D/g, ""))} inputMode="numeric" className="input flex-1 !py-1.5 text-xs" />
+          <input value={cupo} onChange={(e) => setCupo(formatMiles(e.target.value))} inputMode="numeric" className="input flex-1 !py-1.5 text-xs" />
           <button onClick={saveCupo} className="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-lg px-3 text-xs font-bold">{cupoSaved ? "✓ Guardado" : "Guardar"}</button>
         </div>
         <p className="text-[10px] text-slate-600 mt-2">
@@ -1898,7 +1898,7 @@ function BaseFicha({ base, contacts, shifts, liveShifts, adminPin, onChange, onC
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [rangeKey, setRangeKey] = useState("todo");
-  const [costoInput, setCostoInput] = useState(String(num(base.costo)));
+  const [costoInput, setCostoInput] = useState(formatMiles(String(num(base.costo))));
   const [costoSaved, setCostoSaved] = useState(false);
 
   function applyPreset(key) {
@@ -2041,7 +2041,7 @@ function BaseFicha({ base, contacts, shifts, liveShifts, adminPin, onChange, onC
 
         <Card icon={<DollarSign size={15} />} title="Costo y ROI">
           <div className="flex gap-1.5 mb-3">
-            <input value={costoInput} onChange={(e) => setCostoInput(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Costo de la lista" className="input flex-1 text-xs" />
+            <input value={costoInput} onChange={(e) => setCostoInput(formatMiles(e.target.value))} inputMode="numeric" placeholder="Costo de la lista" className="input flex-1 text-xs" />
             <button onClick={saveCosto} className="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-lg px-3 text-xs font-bold">{costoSaved ? "✓" : "Guardar"}</button>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
