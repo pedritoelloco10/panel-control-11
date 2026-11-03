@@ -326,7 +326,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
                   return (
                     <div key={i} className="bg-white/5 rounded-lg p-2.5">
                       <p className="text-[11px] text-slate-300 mb-1.5">
-                        {f.fecha.toLocaleString("es-AR")} · {TIPO_LABEL[f.tipo]} · {f.usuario} · {money(f.monto)}
+                        {f.fecha.toLocaleString("es-AR", { hour12: false })} · {TIPO_LABEL[f.tipo]} · {f.usuario} · {money(f.monto)}
                       </p>
                       <div className="flex gap-1.5 flex-wrap">
                         <button onClick={() => setAsignacionManual((p) => { const n = { ...p }; delete n[f.tx]; return n; })} className={btnClass(!elegido)}>
@@ -376,7 +376,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
                 <div className="space-y-1.5">
                   {resultados.map((r, i) => (
                     <div key={i} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${r.estado === "ok" ? "bg-white/5" : "bg-amber-500/10 ring-1 ring-amber-500/30"}`}>
-                      <span className="text-slate-400">{ORIGEN_LETRA[r.origen] || "?"} · {money(num(r.monto))} · {new Date(r.hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-slate-400">{ORIGEN_LETRA[r.origen] || "?"} · {money(num(r.monto))} · {new Date(r.hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                       <span className={r.estado === "ok" ? "text-emerald-400" : "text-amber-400 font-bold"}>{r.detalle}</span>
                     </div>
                   ))}
