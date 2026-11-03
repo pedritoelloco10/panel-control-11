@@ -200,27 +200,32 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
           )}
 
           {resumen.sinTurno.length > 0 && (
-            <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.sinTurno.length} operación(es) sin turno cerrado que las cubra`} subtitle="Elegí a qué turno cargarlas, o dejalas afuera">
+            <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.sinTurno.length} operación(es) sin turno cerrado que las cubra`} subtitle="Elegí vos a cuál turno entra cada una, o dejala afuera — por defecto no se importa ninguna">
               <div className="space-y-2">
                 {resumen.sinTurno.slice(0, 20).map((f, i) => {
                   const { anterior, siguiente } = turnosAdyacentes(f.fecha, shiftsCerrados);
+                  const elegido = asignacionManual[f.tx]; // undefined = "no importar" (default)
+                  const btnClass = (activo) => `text-[10px] rounded-lg px-2 py-1 font-bold ${activo ? "bg-emerald-500 text-white" : "bg-white/10 text-slate-400"}`;
                   return (
                     <div key={i} className="bg-white/5 rounded-lg p-2.5">
                       <p className="text-[11px] text-slate-300 mb-1.5">
                         {f.fecha.toLocaleString("es-AR")} · {TIPO_LABEL[f.tipo]} · {f.usuario} · {money(f.monto)}
                       </p>
                       <div className="flex gap-1.5 flex-wrap">
+                        <button onClick={() => setAsignacionManual((p) => { const n = { ...p }; delete n[f.tx]; return n; })} className={btnClass(!elegido)}>
+                          No importar
+                        </button>
                         {anterior && (
-                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: anterior.id }))} className="text-[10px] bg-indigo-500/20 text-indigo-300 rounded-lg px-2 py-1 font-bold">
-                            Cargar al turno anterior ({anterior.responsable}, {anterior.fecha} {anterior.turno_label || ""})
+                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: anterior.id }))} className={btnClass(elegido === anterior.id)}>
+                            Turno anterior ({anterior.responsable}, {anterior.fecha} {anterior.turno_label || ""})
                           </button>
                         )}
                         {siguiente && (
-                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: siguiente.id }))} className="text-[10px] bg-indigo-500/20 text-indigo-300 rounded-lg px-2 py-1 font-bold">
-                            Cargar al turno siguiente ({siguiente.responsable}, {siguiente.fecha} {siguiente.turno_label || ""})
+                          <button onClick={() => setAsignacionManual((p) => ({ ...p, [f.tx]: siguiente.id }))} className={btnClass(elegido === siguiente.id)}>
+                            Turno siguiente ({siguiente.responsable}, {siguiente.fecha} {siguiente.turno_label || ""})
                           </button>
                         )}
-                        {!anterior && !siguiente && <p className="text-[10px] text-slate-600">No hay ningún turno cerrado cerca de esta fecha.</p>}
+                        {!anterior && !siguiente && <p className="text-[10px] text-slate-600 self-center">No hay ningún turno cerrado cerca de esta fecha.</p>}
                       </div>
                     </div>
                   );
