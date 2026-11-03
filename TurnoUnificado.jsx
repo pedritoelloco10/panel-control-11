@@ -241,7 +241,11 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
             placeholder="0" className="input"
           />
         </Field>
-        <p className="text-[10px] text-slate-600 mt-2">Ganamos no hace falta contarlo — se completa solo y tu encargado lo verifica con la importación de Ganamos.</p>
+        <div className="mt-2.5">
+          <p className="text-[9px] text-slate-500 uppercase mb-1">GANA — se completa sola</p>
+          <p className="text-sm font-bold bg-black/20 rounded-lg px-2.5 py-2">{money(num(stockCierreInf.G || 0))}</p>
+        </div>
+        <p className="text-[10px] text-slate-600 mt-2">Ganamos no hace falta contarlo — se completa sola con lo que el sistema espera, y tu encargado la verifica con la importación de Ganamos.</p>
       </Card>
 
       {cierreCheck.anyCierreData && (
