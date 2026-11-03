@@ -1242,6 +1242,9 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
                 </p>
               ))}
             </div>
+            {s.stock_cierre?.G_reportado && (
+              <p className="text-[10px] text-indigo-300 mt-1">GANA — el empleado anotó {money(num(s.stock_cierre.G_reportado))} al cerrar (referencia, sin verificar todavía)</p>
+            )}
           </div>
           {(s.bajadas || []).length > 0 && (
             <div>

@@ -241,7 +241,14 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
             placeholder="0" className="input"
           />
         </Field>
-        <p className="text-[10px] text-slate-600 mt-2">Ganamos no hace falta contarlo — eso lo verifica tu encargado con el saldo real que trae la importación de Ganamos, no es algo que vos controles acá.</p>
+        <Field label="GANA — saldo que ves ahora en Ganamos (opcional)">
+          <input
+            inputMode="numeric" value={stockCierreInf.G_reportado || ""}
+            onChange={(e) => setStockCierreInf({ ...stockCierreInf, G_reportado: e.target.value.replace(/[^\d]/g, "") })}
+            placeholder="0" className="input"
+          />
+        </Field>
+        <p className="text-[10px] text-slate-600 mt-2">No hace falta que lo calcules ni que cierre con nada — solo copiá el número que ves en Ganamos en este momento, para que tu encargado lo tenga de referencia cuando haga la verificación real.</p>
       </Card>
 
       {cierreCheck.anyCierreData && (
