@@ -7,6 +7,7 @@ import {
 import { Card, StatBox, MiniStat } from "./ui";
 import { supabase } from "./supabaseClient";
 import { PLATFORMS, FUENTE_TYPES, LEAD_STATES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno } from "./lib";
+import GanamosImportTab from "./GanamosImportTab";
 
 const CSV_HEADERS = [
   { key: "nombre", label: "Nombre" },
@@ -38,6 +39,10 @@ function computeShift(shift) {
       if (o.origen === "nuevo") { nuevos++; montoNuevos += m; }
       if (o.origen === "derivado") { derivados++; montoDerivados += m; }
       if (o.origen === "lista") { cargasLista++; montoLista += m; }
+    } else if (o.tipo === "bono") {
+      // Bono importado de Ganamos como operación propia (no atado a una carga puntual) —
+      // reduce el stock esperado igual que el campo o.bono de una carga manual.
+      if (porPlataforma[o.plataforma]) porPlataforma[o.plataforma].bono += m;
     } else {
       retirosTotal += m; retirosCount++;
       if (porPlataforma[o.plataforma]) { porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
@@ -84,6 +89,12 @@ function computeShift(shift) {
     nuevos, derivados, cargasLista, montoNuevos, montoDerivados, montoLista, cargasCount, retirosCount, movimientosCount,
     opsCount: (shift.ops || []).length, porPlataforma,
   };
+}
+
+function tipoOpLabel(tipo) {
+  if (tipo === "carga") return { label: "Venta", className: "text-emerald-400" };
+  if (tipo === "bono") return { label: "Bono", className: "text-amber-400" };
+  return { label: "Premio", className: "text-rose-400" };
 }
 
 function sumTotals(computedList) {
@@ -367,6 +378,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
           else if (o.origen === "derivado") { origenR++; porPlataforma[o.plataforma].origenR++; }
           else if (o.origen === "lista") { origenL++; porPlataforma[o.plataforma].origenL++; }
         }
+        else if (o.tipo === "bono") { stockDelta[o.plataforma] -= m; porPlataforma[o.plataforma].bono += m; }
         else { retirosTotal += m; stockDelta[o.plataforma] += m; porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
       });
       const bajadasTotal = (live.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
@@ -416,6 +428,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
     { key: "clientes", label: "Clientes", icon: <Users size={12} /> },
     { key: "empleados", label: "Empleados", icon: <Users size={12} /> },
     { key: "billeteras", label: "Billeteras", icon: <Wallet size={12} /> },
+    { key: "ganamos", label: "Importar Ganamos", icon: <Upload size={12} /> },
   ];
 
   return (
@@ -850,6 +863,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
       {tab === "clientes" && <ClientesRanking computedAll={computedAll} />}
       {tab === "empleados" && <EmployeeManager employees={employees} adminPin={adminPin} onChange={loadAll} />}
       {tab === "billeteras" && <WalletManager wallets={wallets} adminPin={adminPin} onChange={loadAll} />}
+      {tab === "ganamos" && <GanamosImportTab adminPin={adminPin} shifts={shifts} onImported={loadAll} />}
       <OpsSheetModal data={opsModal} onClose={() => setOpsModal(null)} />
     </div>
   );
@@ -1044,7 +1058,7 @@ function OpsSheetModal({ data, onClose }) {
             <tr key={o.id || i} className="border-t border-white/5">
               <td className="py-2 px-2 text-slate-600">{showIndexFrom + i + 1}</td>
               <td className="py-2 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
-              <td className={`py-2 px-2 font-bold ${o.tipo === "carga" ? "text-emerald-400" : "text-rose-400"}`}>{o.tipo === "carga" ? "Venta" : "Premio"}</td>
+              <td className={`py-2 px-2 font-bold ${tipoOpLabel(o.tipo).className}`}>{tipoOpLabel(o.tipo).label}</td>
               <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
               <td className="py-2 px-2 text-right text-slate-500">{o.bono ? money(num(o.bono)) : "—"}</td>
               <td className="py-2 px-2 text-slate-400">{o.origen || "—"}</td>
@@ -1110,7 +1124,7 @@ function OpsTable({ ops }) {
             <tr key={o.id || i} className="border-t border-white/5">
               <td className="py-1.5 px-2 text-slate-600">{i + 1}</td>
               <td className="py-1.5 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
-              <td className={`py-1.5 px-2 font-bold ${o.tipo === "carga" ? "text-emerald-400" : "text-rose-400"}`}>{o.tipo === "carga" ? "Venta" : "Premio"}</td>
+              <td className={`py-1.5 px-2 font-bold ${tipoOpLabel(o.tipo).className}`}>{tipoOpLabel(o.tipo).label}</td>
               <td className="py-1.5 px-2 text-right">{money(num(o.monto))}</td>
               <td className="py-1.5 px-2 text-right text-slate-500">{o.bono ? money(num(o.bono)) : "—"}</td>
               <td className="py-1.5 px-2 text-slate-400">{o.origen || "—"}</td>
@@ -2020,7 +2034,7 @@ function ClientesRanking({ computedAll }) {
       if (dateTo && s.fecha > dateTo) return;
       (s.ops || []).forEach((o) => {
         const cliente = (o.cliente || "").trim();
-        if (!cliente) return;
+        if (!cliente || o.tipo === "bono") return; // el bono no es ni carga ni premio del cliente, se deja afuera de este ranking
         const m = num(o.monto);
         if (!map[cliente]) map[cliente] = { cargas: 0, premios: 0, ops: 0, ultima: s.fecha };
         if (o.tipo === "carga") map[cliente].cargas += m; else map[cliente].premios += m;
