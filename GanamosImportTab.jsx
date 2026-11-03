@@ -114,18 +114,23 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
       });
 
       const entradas = Object.entries(porTurno);
-      const resultados = await Promise.all(entradas.map(([shiftId, ops]) =>
+      const resultados = entradas.length > 0 ? await Promise.all(entradas.map(([shiftId, ops]) =>
         supabase.rpc("admin_importar_ganamos_operaciones", { input_admin_pin: adminPin, target_shift_id: shiftId, nuevas_ops: ops })
           .then((r) => ({ shiftId, ops, ...r }))
-      ));
+      )) : [];
       const fallidas = resultados.filter((r) => r.error || r.data === -1 || r.data == null);
       const ok = resultados.filter((r) => !fallidas.includes(r));
       const totalImportadas = ok.reduce((s, r) => s + r.data, 0);
       const totalIntentadas = ok.reduce((s, r) => s + r.ops.length, 0);
+      // Las operaciones de usuarios todavía sin nombre/origen no se importan ahora, pero
+      // tampoco se pierden: quedan en el texto pegado, y como el dedupe es por ganamos_tx,
+      // volver a pegar el mismo bloque más tarde (una vez tageados) importa solo lo que
+      // faltaba, sin duplicar lo que ya entró.
+      const pendientesPorUsuario = resumen.faltanDatos.length;
 
       setResultado({
         turnos: ok.length, importadas: totalImportadas, duplicadas: totalIntentadas - totalImportadas,
-        fallidas: fallidas.length, errorDetalle: fallidas[0]?.error?.message,
+        fallidas: fallidas.length, errorDetalle: fallidas[0]?.error?.message, pendientesPorUsuario,
       });
       setTexto(""); setParsed(null); setNuevosUsuarios({});
       await cargarUsuarios();
@@ -185,6 +190,11 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
                         onChange={(e) => actualizarBorrador(u, "cliente", e.target.value)}
                         placeholder="Nombre del cliente" className="flex-1 bg-black/20 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
+                      {!nuevosUsuarios[u]?.cliente && (
+                        <button onClick={() => actualizarBorrador(u, "cliente", u)} title="Usar el usuario de Ganamos como nombre, por ahora" className="text-[10px] text-slate-500 underline flex-none self-center">
+                          usar "{u}"
+                        </button>
+                      )}
                       <div className="flex gap-1">
                         {ORIGEN_OPCIONES.map(([key, letra, label]) => (
                           <button
@@ -222,12 +232,17 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
           })}
 
           <Card icon={<CheckCircle2 size={15} className="text-emerald-400" />} title={`${resumen.conTurno.length} operación(es) listas para importar`} subtitle={`En ${new Set(resumen.conTurno.map((f) => f.shift.id)).size} turno(s)`}>
+            {resumen.faltanDatos.length > 0 && (
+              <p className="text-[11px] text-amber-400 mb-2">
+                {resumen.faltanDatos.length} usuario(s) todavía sin nombre/origen — sus operaciones quedan afuera por ahora. Podés importar el resto ya, y pegar este mismo texto de nuevo más tarde cuando los completes (no se duplica lo que ya entró).
+              </p>
+            )}
             <button
               onClick={confirmarImportacion}
-              disabled={importando || resumen.conTurno.length === 0 || resumen.faltanDatos.length > 0}
+              disabled={importando || resumen.conTurno.length === 0}
               className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 font-bold py-2.5 rounded-lg text-xs disabled:opacity-40"
             >
-              {importando ? "Importando..." : resumen.faltanDatos.length > 0 ? `Completá los ${resumen.faltanDatos.length} usuario(s) de arriba primero` : "Confirmar importación"}
+              {importando ? "Importando..." : resumen.faltanDatos.length > 0 ? "Importar lo que ya está completo" : "Confirmar importación"}
             </button>
           </Card>
         </>
@@ -239,6 +254,11 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
             {resultado.importadas} operación(es) agregada(s) en {resultado.turnos} turno(s).
             {resultado.duplicadas > 0 && ` ${resultado.duplicadas} ya estaban importadas (se saltearon solas).`}
           </p>
+          {resultado.pendientesPorUsuario > 0 && (
+            <p className="text-xs text-amber-400 mt-1.5">
+              Quedaron afuera las operaciones de {resultado.pendientesPorUsuario} usuario(s) sin nombre/origen todavía. Pegá el mismo texto de nuevo cuando los completes.
+            </p>
+          )}
           {resultado.fallidas > 0 && (
             <p className="text-xs text-amber-400 mt-1.5">
               {resultado.fallidas} turno(s) no se pudieron actualizar{resultado.errorDetalle ? ` — ${resultado.errorDetalle}` : ""}. Probá de nuevo pegando la misma tabla; lo ya importado no se duplica.
