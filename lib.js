@@ -107,3 +107,104 @@ export function blankOp() {
 export function seedOps(n) {
   return Array.from({ length: n }, blankOp);
 }
+
+// Convierte en filas estructuradas el texto pegado con las operaciones de Ganamos.
+// Acepta dos formatos, detectados línea por línea:
+//   1. Formato canónico (el que se le pide a la IA que lee Ganamos que genere):
+//      TX | FECHA_HORA (AAAA-MM-DD HH:MM) | TIPO (Deposito/Retiro/Bonus) | USUARIO | MONTO
+//   2. Tabla cruda copiada del navegador (tabs, o 2+ espacios si se pegó sin tabs):
+//      TRANSACCIÓN | FECHA (dd/mm/aa hh:mm) | OPERACIÓN | INICIADOR | DE | A | CANTIDAD | SALDO
+const GANAMOS_OPERACION_A_TIPO = { deposito: "carga", retiro: "retiro", bonus: "bono" };
+function normalizarTexto(s) {
+  return String(s ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function parsearFecha(fechaStr) {
+  // AAAA-MM-DD HH:MM (formato canónico)
+  let m = fechaStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+  if (m) { const [, yy, mm, dd, hh, min] = m; return new Date(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(min)); }
+  // dd/mm/aa hh:mm (tabla cruda de Ganamos)
+  m = fechaStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})/);
+  if (m) { const [, dd, mm, yy, hh, min] = m; const anio = yy.length === 2 ? 2000 + Number(yy) : Number(yy); return new Date(anio, Number(mm) - 1, Number(dd), Number(hh), Number(min)); }
+  return null;
+}
+export function parseGanamosTabla(texto) {
+  const filas = []; const errores = [];
+  (texto || "").split("\n").forEach((linea, i) => {
+    const limpia = linea.trim();
+    if (!limpia) return;
+
+    let tx, fechaStr, operacion, usuario, cantidadStr;
+    if (limpia.includes("|")) {
+      const celdas = limpia.split("|").map((c) => c.trim());
+      if (celdas.length !== 5) { errores.push({ linea: i + 1, texto: limpia, motivo: "se esperaban 5 campos separados por |" }); return; }
+      [tx, fechaStr, operacion, usuario, cantidadStr] = celdas;
+    } else {
+      let celdas = limpia.split("\t").map((c) => c.trim());
+      if (celdas.length < 7) celdas = limpia.split(/\s{2,}/).map((c) => c.trim());
+      if (celdas.length < 7) { errores.push({ linea: i + 1, texto: limpia, motivo: "no se reconocen las columnas" }); return; }
+      [tx, fechaStr, operacion, , , usuario, cantidadStr] = celdas;
+    }
+    if (normalizarTexto(tx) === "transaccion" || normalizarTexto(tx) === "tx") return; // fila de encabezado
+
+    const tipo = GANAMOS_OPERACION_A_TIPO[normalizarTexto(operacion)];
+    if (!tipo) { errores.push({ linea: i + 1, texto: limpia, motivo: `operación desconocida: "${operacion}"` }); return; }
+
+    const fecha = parsearFecha(fechaStr);
+    if (!fecha || isNaN(fecha.getTime())) { errores.push({ linea: i + 1, texto: limpia, motivo: `fecha no reconocida: "${fechaStr}"` }); return; }
+
+    const monto = num(cantidadStr);
+    if (!monto) { errores.push({ linea: i + 1, texto: limpia, motivo: `monto inválido: "${cantidadStr}"` }); return; }
+    if (!usuario) { errores.push({ linea: i + 1, texto: limpia, motivo: "sin usuario" }); return; }
+
+    filas.push({ tx, fecha, tipo, usuario, monto });
+  });
+  return { filas, errores };
+}
+
+// Cruza lo que el empleado anotó en vivo (origen + monto, sin saber el usuario de Ganamos)
+// contra las filas ya parseadas de Ganamos para ESE turno, para validar que el bono que dio
+// la plataforma coincide con lo que corresponde según el origen.
+//   - "nuevo" (P): regla estricta, tiene que haber ~50% de bono.
+//   - "derivado" (R) y "lista" (L): todavía no hay un % único y fijo (depende de otros
+//     factores que no vemos acá) — se muestra el % real encontrado, sin marcar error.
+const ORIGEN_BONO_ESPERADO = { nuevo: 0.5 };
+const TOLERANCIA_PORCENTUAL = 0.02; // 2 puntos porcentuales de margen
+const TOLERANCIA_MINUTOS = 60;
+
+export function cruzarRegistrosConGanamos(registros, filasGanamosDelTurno) {
+  const cargas = filasGanamosDelTurno.filter((f) => f.tipo === "carga");
+  const bonos = filasGanamosDelTurno.filter((f) => f.tipo === "bono");
+
+  return registros.map((r) => {
+    const montoR = num(r.monto);
+    const horaR = new Date(r.hora);
+    let mejor = null, mejorDif = Infinity;
+    cargas.forEach((c) => {
+      if (num(c.monto) !== montoR) return;
+      const dif = Math.abs(c.fecha.getTime() - horaR.getTime());
+      if (dif < mejorDif) { mejor = c; mejorDif = dif; }
+    });
+    if (!mejor || mejorDif > TOLERANCIA_MINUTOS * 60 * 1000) {
+      return { ...r, estado: "sin_match", usuario: null, detalle: "No se encontró en Ganamos una carga de ese monto cerca de esa hora." };
+    }
+
+    const bonoReal = bonos.find((b) => b.usuario === mejor.usuario);
+    const bonoRealMonto = bonoReal ? num(bonoReal.monto) : 0;
+    const bonoRealPct = montoR ? bonoRealMonto / montoR : 0;
+    const pctEsperado = ORIGEN_BONO_ESPERADO[r.origen];
+
+    if (pctEsperado == null) {
+      return {
+        ...r, estado: "ok", usuario: mejor.usuario, bonoRealPct,
+        detalle: bonoReal ? `Bono encontrado: ${Math.round(bonoRealPct * 100)}%` : "Sin bono registrado en Ganamos",
+      };
+    }
+    if (!bonoReal || Math.abs(bonoRealPct - pctEsperado) > TOLERANCIA_PORCENTUAL) {
+      return {
+        ...r, estado: "revisar", usuario: mejor.usuario, bonoRealPct,
+        detalle: bonoReal ? `Bono real ${Math.round(bonoRealPct * 100)}%, se esperaba ${Math.round(pctEsperado * 100)}%` : `Falta el bono del ${Math.round(pctEsperado * 100)}%`,
+      };
+    }
+    return { ...r, estado: "ok", usuario: mejor.usuario, bonoRealPct, detalle: `Bono correcto (${Math.round(bonoRealPct * 100)}%)` };
+  });
+}
