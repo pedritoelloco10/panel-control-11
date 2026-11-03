@@ -241,28 +241,22 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
             placeholder="0" className="input"
           />
         </Field>
-        <div className="mt-2.5">
-          <p className="text-[9px] text-slate-500 uppercase mb-1">GANA — se completa sola</p>
-          <p className="text-sm font-bold bg-black/20 rounded-lg px-2.5 py-2">{money(num(stockCierreInf.G || 0))}</p>
-        </div>
-        <p className="text-[10px] text-slate-600 mt-2">Ganamos no hace falta contarlo — se completa sola con lo que el sistema espera, y tu encargado la verifica con la importación de Ganamos.</p>
+        <p className="text-[10px] text-slate-600 mt-2">Ganamos no hace falta contarlo — eso lo verifica tu encargado con el saldo real que trae la importación de Ganamos, no es algo que vos controles acá.</p>
       </Card>
 
       {cierreCheck.anyCierreData && (
-        <Card icon={<CheckCircle2 size={15} />} title="Control de cierre" subtitle="Comparación automática — esperado vs. contado">
-          <div className="grid grid-cols-3 gap-2">
+        <Card icon={<CheckCircle2 size={15} />} title="Control de cierre" subtitle="Efectivo y fichas de Bet — lo único que contás vos">
+          <div className="grid grid-cols-2 gap-2">
             <div className="bg-black/20 rounded-xl p-2.5 text-center">
               <p className="text-[10px] text-slate-500 mb-1">Efectivo</p>
               <Badge ok={Math.abs(cierreCheck.diffEfectivo) < 1} textBad={`Dif. ${money(cierreCheck.diffEfectivo)}`} />
             </div>
-            {PLATFORMS.map((p) => (
-              <div key={p.key} className="bg-black/20 rounded-xl p-2.5 text-center">
-                <p className="text-[10px] text-slate-500 mb-1">Fichas {p.label}</p>
-                <Badge ok={Math.abs(cierreCheck.diffFichas[p.key]) < 1} textBad={`Dif. ${money(cierreCheck.diffFichas[p.key])}`} />
-              </div>
-            ))}
+            <div className="bg-black/20 rounded-xl p-2.5 text-center">
+              <p className="text-[10px] text-slate-500 mb-1">Fichas BET</p>
+              <Badge ok={Math.abs(cierreCheck.diffFichas.B) < 1} textBad={`Dif. ${money(cierreCheck.diffFichas.B)}`} />
+            </div>
           </div>
-          <p className="text-[10px] text-slate-600 mt-2">Referencia en vivo — el control real de Ganamos lo hace tu encargado al cerrar.</p>
+          <p className="text-[10px] text-slate-600 mt-2">Las fichas de Ganamos las verifica tu encargado aparte, con el saldo real de la plataforma.</p>
         </Card>
       )}
 

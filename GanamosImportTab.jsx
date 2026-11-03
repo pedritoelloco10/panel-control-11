@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Upload, AlertTriangle, CheckCircle2, Wallet } from "lucide-react";
 import { Card } from "./ui";
 import { supabase } from "./supabaseClient";
 import { num, formatMiles, money, parseGanamosTabla, cruzarRegistrosConGanamos } from "./lib";
@@ -55,6 +55,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
   const [importando, setImportando] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [asignacionManual, setAsignacionManual] = useState({}); // tx -> shiftId (para las que no matchean solas)
+  const [saldoGanaPorTurno, setSaldoGanaPorTurno] = useState({}); // shiftId -> saldo real que muestra Ganamos
 
   async function cargarUsuarios() {
     const { data } = await supabase.rpc("admin_get_ganamos_usuarios", { input_admin_pin: adminPin });
@@ -69,6 +70,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
   function procesar() {
     setResultado(null);
     setAsignacionManual({});
+    setSaldoGanaPorTurno({});
     const { filas, errores } = parseGanamosTabla(texto);
     const conTurno = filas.map((f) => ({ ...f, shift: matchShift(f.fecha, shiftsCerrados) }));
     setParsed({ filas: conTurno, errores });
@@ -110,6 +112,13 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
     }).filter(Boolean);
   }, [resumen]);
 
+  const shiftsAImportar = useMemo(() => {
+    if (!resumen) return [];
+    const vistos = new Map();
+    resumen.conTurno.forEach((f) => { if (!vistos.has(f.shift.id)) vistos.set(f.shift.id, f.shift); });
+    return [...vistos.values()];
+  }, [resumen]);
+
   async function confirmarImportacion() {
     if (!resumen || resumen.conTurno.length === 0) return;
     setImportando(true);
@@ -141,8 +150,10 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
       });
 
       const resultados = await Promise.all(entradas.map(([shiftId, ops]) =>
-        supabase.rpc("admin_importar_ganamos_operaciones", { input_admin_pin: adminPin, target_shift_id: shiftId, nuevas_ops: ops })
-          .then((r) => ({ shiftId, ops, ...r }))
+        supabase.rpc("admin_importar_ganamos_operaciones", {
+          input_admin_pin: adminPin, target_shift_id: shiftId, nuevas_ops: ops,
+          nuevo_saldo_gana: saldoGanaPorTurno[shiftId] ? formatMiles(saldoGanaPorTurno[shiftId]) : null,
+        }).then((r) => ({ shiftId, ops, ...r }))
       ));
       const fallidas = resultados.filter((r) => r.error || r.data === -1 || r.data == null);
       const ok = resultados.filter((r) => !fallidas.includes(r));
@@ -153,7 +164,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
         turnos: ok.length, importadas: totalImportadas, duplicadas: totalIntentadas - totalImportadas,
         fallidas: fallidas.length, errorDetalle: fallidas[0]?.error?.message,
       });
-      setTexto(""); setParsed(null); setAsignacionManual({});
+      setTexto(""); setParsed(null); setAsignacionManual({}); setSaldoGanaPorTurno({});
       await cargarUsuarios();
       onImported && onImported();
     } finally {
@@ -245,6 +256,22 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
               </Card>
             );
           })}
+
+          <Card icon={<Wallet size={15} className="text-indigo-300" />} title="Saldo real de Ganamos al cierre de cada turno" subtitle='El número "Saldo" que muestra Ganamos arriba a la derecha — así el control de fichas GANA compara contra algo real, no contra una estimación'>
+            <div className="space-y-2">
+              {shiftsAImportar.map((shift) => (
+                <div key={shift.id} className="flex items-center gap-2">
+                  <p className="text-[11px] text-slate-400 flex-1">{shift.fecha} {shift.turno_label || ""} · {shift.responsable}</p>
+                  <input
+                    inputMode="numeric" placeholder="Saldo Ganamos" value={saldoGanaPorTurno[shift.id] || ""}
+                    onChange={(e) => setSaldoGanaPorTurno((p) => ({ ...p, [shift.id]: formatMiles(e.target.value) }))}
+                    className="w-36 bg-black/20 rounded-lg px-2.5 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-600 mt-2">Opcional — si lo dejás vacío, el control de fichas GANA de ese turno queda sin verificar hasta que lo cargues en una importación siguiente.</p>
+          </Card>
 
           <Card icon={<CheckCircle2 size={15} className="text-emerald-400" />} title={`${resumen.conTurno.length} operación(es) listas para importar`} subtitle={`En ${new Set(resumen.conTurno.map((f) => f.shift.id)).size} turno(s)`}>
             {cruces.length === 0 && (
