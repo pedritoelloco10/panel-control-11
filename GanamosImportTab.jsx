@@ -140,11 +140,11 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
       <Card icon={<Upload size={15} />} title="Importar operaciones de Ganamos" subtitle="Pegá la tabla de Depósitos/Retiros Jugadores — se reparte sola por turno">
         <p className="text-[11px] text-slate-500 mb-2">
           Solo se puede importar a <b>turnos ya cerrados</b> (nunca a uno abierto ahora mismo, para no pisar el autoguardado del empleado).
-          Copiá la tabla completa de Ganamos (Reportes financieros → Depósitos/Retiros Jugadores) y pegala acá tal cual.
+          Pegá acá lo que te pase la otra sesión conectada a Ganamos — también acepta la tabla cruda copiada directo del navegador.
         </p>
         <textarea
           value={texto} onChange={(e) => setTexto(e.target.value)}
-          placeholder="Pegá acá la tabla copiada de Ganamos..."
+          placeholder={"Pegá acá el texto, una operación por línea:\nTX | FECHA_HORA | TIPO | USUARIO | MONTO"}
           className="w-full h-32 bg-white/5 ring-1 ring-white/10 rounded-lg p-2.5 text-[11px] font-mono mb-2 focus:outline-none focus:ring-indigo-500"
         />
         <button onClick={procesar} disabled={!texto.trim()} className="bg-gradient-to-r from-indigo-500 to-violet-600 font-bold py-2 px-4 rounded-lg text-xs disabled:opacity-40">

@@ -108,36 +108,49 @@ export function seedOps(n) {
   return Array.from({ length: n }, blankOp);
 }
 
-// Convierte la tabla de "Depósitos/Retiros Jugadores" de Ganamos, tal cual se
-// pega copiándola del navegador, en filas estructuradas. El navegador copia
-// una tabla HTML como una línea por fila y las celdas separadas por tabs —
-// por eso se parte primero por tab, y si una línea no trae tabs (se pegó con
-// espacios en vez de tabs) se usa 2+ espacios seguidos como separador.
-// Columnas esperadas: TRANSACCIÓN | FECHA | OPERACIÓN | INICIADOR | DE | A | CANTIDAD | SALDO
+// Convierte en filas estructuradas el texto pegado con las operaciones de Ganamos.
+// Acepta dos formatos, detectados línea por línea:
+//   1. Formato canónico (el que se le pide a la IA que lee Ganamos que genere):
+//      TX | FECHA_HORA (AAAA-MM-DD HH:MM) | TIPO (Deposito/Retiro/Bonus) | USUARIO | MONTO
+//   2. Tabla cruda copiada del navegador (tabs, o 2+ espacios si se pegó sin tabs):
+//      TRANSACCIÓN | FECHA (dd/mm/aa hh:mm) | OPERACIÓN | INICIADOR | DE | A | CANTIDAD | SALDO
 const GANAMOS_OPERACION_A_TIPO = { deposito: "carga", retiro: "retiro", bonus: "bono" };
 function normalizarTexto(s) {
   return String(s ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function parsearFecha(fechaStr) {
+  // AAAA-MM-DD HH:MM (formato canónico)
+  let m = fechaStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+  if (m) { const [, yy, mm, dd, hh, min] = m; return new Date(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(min)); }
+  // dd/mm/aa hh:mm (tabla cruda de Ganamos)
+  m = fechaStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})/);
+  if (m) { const [, dd, mm, yy, hh, min] = m; const anio = yy.length === 2 ? 2000 + Number(yy) : Number(yy); return new Date(anio, Number(mm) - 1, Number(dd), Number(hh), Number(min)); }
+  return null;
 }
 export function parseGanamosTabla(texto) {
   const filas = []; const errores = [];
   (texto || "").split("\n").forEach((linea, i) => {
     const limpia = linea.trim();
     if (!limpia) return;
-    let celdas = limpia.split("\t").map((c) => c.trim());
-    if (celdas.length < 7) celdas = limpia.split(/\s{2,}/).map((c) => c.trim());
-    if (celdas.length < 7) { errores.push({ linea: i + 1, texto: limpia, motivo: "no se reconocen las columnas" }); return; }
-    const [tx, fechaStr, operacion, , , usuario, cantidadStr] = celdas;
-    if (normalizarTexto(tx) === "transaccion") return; // fila de encabezado
+
+    let tx, fechaStr, operacion, usuario, cantidadStr;
+    if (limpia.includes("|")) {
+      const celdas = limpia.split("|").map((c) => c.trim());
+      if (celdas.length !== 5) { errores.push({ linea: i + 1, texto: limpia, motivo: "se esperaban 5 campos separados por |" }); return; }
+      [tx, fechaStr, operacion, usuario, cantidadStr] = celdas;
+    } else {
+      let celdas = limpia.split("\t").map((c) => c.trim());
+      if (celdas.length < 7) celdas = limpia.split(/\s{2,}/).map((c) => c.trim());
+      if (celdas.length < 7) { errores.push({ linea: i + 1, texto: limpia, motivo: "no se reconocen las columnas" }); return; }
+      [tx, fechaStr, operacion, , , usuario, cantidadStr] = celdas;
+    }
+    if (normalizarTexto(tx) === "transaccion" || normalizarTexto(tx) === "tx") return; // fila de encabezado
 
     const tipo = GANAMOS_OPERACION_A_TIPO[normalizarTexto(operacion)];
     if (!tipo) { errores.push({ linea: i + 1, texto: limpia, motivo: `operación desconocida: "${operacion}"` }); return; }
 
-    const m = fechaStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})/);
-    if (!m) { errores.push({ linea: i + 1, texto: limpia, motivo: `fecha no reconocida: "${fechaStr}"` }); return; }
-    const [, dd, mm, yy, hh, min] = m;
-    const anio = yy.length === 2 ? 2000 + Number(yy) : Number(yy);
-    const fecha = new Date(anio, Number(mm) - 1, Number(dd), Number(hh), Number(min));
-    if (isNaN(fecha.getTime())) { errores.push({ linea: i + 1, texto: limpia, motivo: `fecha inválida: "${fechaStr}"` }); return; }
+    const fecha = parsearFecha(fechaStr);
+    if (!fecha || isNaN(fecha.getTime())) { errores.push({ linea: i + 1, texto: limpia, motivo: `fecha no reconocida: "${fechaStr}"` }); return; }
 
     const monto = num(cantidadStr);
     if (!monto) { errores.push({ linea: i + 1, texto: limpia, motivo: `monto inválido: "${cantidadStr}"` }); return; }
