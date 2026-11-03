@@ -4,11 +4,7 @@ import { Card } from "./ui";
 import { supabase } from "./supabaseClient";
 import { num, formatMiles, money, parseGanamosTabla, cruzarRegistrosConGanamos } from "./lib";
 
-const ORIGEN_OPCIONES = [
-  ["nuevo", "P", "Publicidad"],
-  ["derivado", "R", "Referido"],
-  ["lista", "L", "Lista"],
-];
+const ORIGEN_LETRA = { nuevo: "P", derivado: "R", lista: "L" };
 const TIPO_LABEL = { carga: "Depósito", retiro: "Retiro", bono: "Bonus" };
 
 function shiftWindow(shift) {
@@ -28,9 +24,18 @@ function matchShift(fecha, shiftsCerrados) {
   }) || null;
 }
 
+// El admin ya NO elige el origen al importar — eso lo anota el empleado en su pantalla
+// (carga rápida P/R/L). Acá solo se cruza contra lo que el empleado ya cargó para ese
+// turno; si no hay match, la operación queda sin origen (se puede completar después).
+function construirMapaOrigen(registros, filasGanamosDelTurno) {
+  const cruzados = cruzarRegistrosConGanamos(registros, filasGanamosDelTurno);
+  const mapa = {};
+  cruzados.forEach((r) => { if (r.usuario && r.estado !== "sin_match") mapa[r.usuario] = r.origen; });
+  return mapa;
+}
+
 export default function GanamosImportTab({ adminPin, shifts, onImported }) {
-  const [usuarios, setUsuarios] = useState({}); // usuario -> { cliente, origen }
-  const [nuevosUsuarios, setNuevosUsuarios] = useState({}); // usuario -> { cliente, origen } (borrador, todavía no guardado)
+  const [usuarios, setUsuarios] = useState({}); // usuario -> cliente (nombre)
   const [texto, setTexto] = useState("");
   const [parsed, setParsed] = useState(null); // { filas, errores }
   const [importando, setImportando] = useState(false);
@@ -39,7 +44,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
   async function cargarUsuarios() {
     const { data } = await supabase.rpc("admin_get_ganamos_usuarios", { input_admin_pin: adminPin });
     const map = {};
-    (data || []).forEach((u) => { map[u.usuario] = { cliente: u.cliente, origen: u.origen }; });
+    (data || []).forEach((u) => { map[u.usuario] = u.cliente; });
     setUsuarios(map);
   }
   useEffect(() => { cargarUsuarios(); }, []);
@@ -51,31 +56,21 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
     const { filas, errores } = parseGanamosTabla(texto);
     const conTurno = filas.map((f) => ({ ...f, shift: matchShift(f.fecha, shiftsCerrados) }));
     setParsed({ filas: conTurno, errores });
-    // Precarga el borrador con los usuarios nuevos que aparecen, con el nombre ya puesto
-    // igual al usuario de Ganamos (así se guarda tal cual, sin pedir el nombre real) — solo
-    // falta elegir el origen P/R/L de cada uno.
-    const borrador = {};
-    conTurno.forEach((f) => { if (!usuarios[f.usuario] && !borrador[f.usuario]) borrador[f.usuario] = { cliente: f.usuario, origen: null }; });
-    setNuevosUsuarios(borrador);
-  }
-
-  function actualizarBorrador(usuario, campo, valor) {
-    setNuevosUsuarios((prev) => ({ ...prev, [usuario]: { ...prev[usuario], [campo]: valor } }));
   }
 
   const resumen = useMemo(() => {
     if (!parsed) return null;
     const sinTurno = parsed.filas.filter((f) => !f.shift);
     const conTurno = parsed.filas.filter((f) => f.shift);
-    const porUsuarioFaltante = [...new Set(conTurno.filter((f) => !usuarios[f.usuario]).map((f) => f.usuario))];
-    const faltanDatos = porUsuarioFaltante.filter((u) => !(nuevosUsuarios[u]?.cliente && nuevosUsuarios[u]?.origen));
-    return { sinTurno, conTurno, porUsuarioFaltante, faltanDatos };
-  }, [parsed, usuarios, nuevosUsuarios]);
+    const usuariosNuevos = [...new Set(conTurno.filter((f) => !usuarios[f.usuario]).map((f) => f.usuario))];
+    return { sinTurno, conTurno, usuariosNuevos };
+  }, [parsed, usuarios]);
 
   // Cruza, por turno, lo que el empleado anotó en vivo (tipo "registro_rapido" dentro de
   // shift.ops) contra lo que trajo Ganamos para ese mismo turno — valida el % de bono según
-  // el origen que marcó el empleado. Si todavía no existe la pantalla de carga rápida del
-  // empleado, esto simplemente no muestra nada (no hay registros que cruzar).
+  // el origen que marcó el empleado, y de paso resuelve el origen de cada carga. Si todavía
+  // no existe la pantalla de carga rápida del empleado, esto no muestra nada (no hay
+  // registros que cruzar) y las cargas quedan sin origen hasta que sí los haya.
   const cruces = useMemo(() => {
     if (!resumen) return [];
     const porShiftId = {};
@@ -92,49 +87,46 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
     if (!resumen || resumen.conTurno.length === 0) return;
     setImportando(true);
     try {
-      // 1) Guardar los usuarios nuevos que se completaron en este lote.
-      const aGuardar = resumen.porUsuarioFaltante.filter((u) => nuevosUsuarios[u]?.cliente && nuevosUsuarios[u]?.origen);
-      await Promise.all(aGuardar.map((u) =>
-        supabase.rpc("admin_set_ganamos_usuario", {
-          input_admin_pin: adminPin, p_usuario: u, p_cliente: nuevosUsuarios[u].cliente, p_origen: nuevosUsuarios[u].origen,
-        })
+      // 1) Registrar los usuarios nuevos con su usuario de Ganamos como nombre — sin pedir
+      // nada más, no bloquea la importación.
+      await Promise.all(resumen.usuariosNuevos.map((u) =>
+        supabase.rpc("admin_set_ganamos_usuario", { input_admin_pin: adminPin, p_usuario: u, p_cliente: u })
       ));
-      const mapaFinal = { ...usuarios };
-      aGuardar.forEach((u) => { mapaFinal[u] = nuevosUsuarios[u]; });
+      const clientePorUsuario = { ...usuarios };
+      resumen.usuariosNuevos.forEach((u) => { clientePorUsuario[u] = u; });
 
-      // 2) Agrupar por turno y armar las operaciones en el formato que ya usa shifts.ops.
+      // 2) Agrupar por turno y resolver el origen de cada carga cruzando contra lo que
+      // anotó el empleado en ese turno (si no hay match, queda sin origen).
       const porTurno = {};
-      resumen.conTurno.forEach((f) => {
-        const datos = mapaFinal[f.usuario];
-        if (!datos) return; // usuario sin nombre/origen todavía — se saltea, no se importa a medias
-        const id = f.shift.id;
-        if (!porTurno[id]) porTurno[id] = [];
-        porTurno[id].push({
+      resumen.conTurno.forEach((f) => { (porTurno[f.shift.id] ||= []).push(f); });
+
+      const entradas = Object.entries(porTurno).map(([shiftId, filas]) => {
+        const shift = filas[0].shift;
+        const registros = (shift.ops || []).filter((o) => o.tipo === "registro_rapido");
+        const mapaOrigen = registros.length ? construirMapaOrigen(registros, filas) : {};
+        const ops = filas.map((f) => ({
           tipo: f.tipo, plataforma: "G", monto: formatMiles(String(Math.round(f.monto))), bono: "0",
-          cliente: datos.cliente, origen: f.tipo === "carga" ? datos.origen : null, ganamos_tx: f.tx, usuario: f.usuario,
-        });
+          cliente: clientePorUsuario[f.usuario] || f.usuario,
+          origen: f.tipo === "carga" ? (mapaOrigen[f.usuario] || null) : null,
+          ganamos_tx: f.tx, usuario: f.usuario,
+        }));
+        return [shiftId, ops];
       });
 
-      const entradas = Object.entries(porTurno);
-      const resultados = entradas.length > 0 ? await Promise.all(entradas.map(([shiftId, ops]) =>
+      const resultados = await Promise.all(entradas.map(([shiftId, ops]) =>
         supabase.rpc("admin_importar_ganamos_operaciones", { input_admin_pin: adminPin, target_shift_id: shiftId, nuevas_ops: ops })
           .then((r) => ({ shiftId, ops, ...r }))
-      )) : [];
+      ));
       const fallidas = resultados.filter((r) => r.error || r.data === -1 || r.data == null);
       const ok = resultados.filter((r) => !fallidas.includes(r));
       const totalImportadas = ok.reduce((s, r) => s + r.data, 0);
       const totalIntentadas = ok.reduce((s, r) => s + r.ops.length, 0);
-      // Las operaciones de usuarios todavía sin nombre/origen no se importan ahora, pero
-      // tampoco se pierden: quedan en el texto pegado, y como el dedupe es por ganamos_tx,
-      // volver a pegar el mismo bloque más tarde (una vez tageados) importa solo lo que
-      // faltaba, sin duplicar lo que ya entró.
-      const pendientesPorUsuario = resumen.faltanDatos.length;
 
       setResultado({
         turnos: ok.length, importadas: totalImportadas, duplicadas: totalIntentadas - totalImportadas,
-        fallidas: fallidas.length, errorDetalle: fallidas[0]?.error?.message, pendientesPorUsuario,
+        fallidas: fallidas.length, errorDetalle: fallidas[0]?.error?.message,
       });
-      setTexto(""); setParsed(null); setNuevosUsuarios({});
+      setTexto(""); setParsed(null);
       await cargarUsuarios();
       onImported && onImported();
     } finally {
@@ -180,30 +172,9 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
             </Card>
           )}
 
-          {resumen.porUsuarioFaltante.length > 0 && (
-            <Card icon={<AlertTriangle size={15} className="text-amber-400" />} title={`${resumen.porUsuarioFaltante.length} usuario(s) de Ganamos nuevo(s)`} subtitle="Se guardan con su usuario de Ganamos como nombre — solo falta el origen de cada uno">
-              <div className="space-y-2">
-                {resumen.porUsuarioFaltante.map((u) => (
-                  <div key={u} className="bg-white/5 rounded-lg p-2.5">
-                    <p className="text-[11px] font-bold text-indigo-300 mb-1.5">{u}</p>
-                    <div className="flex gap-2">
-                      <input
-                        value={nuevosUsuarios[u]?.cliente || ""}
-                        onChange={(e) => actualizarBorrador(u, "cliente", e.target.value)}
-                        placeholder="Nombre del cliente" className="flex-1 bg-black/20 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                      <div className="flex gap-1">
-                        {ORIGEN_OPCIONES.map(([key, letra, label]) => (
-                          <button
-                            key={key} title={label} onClick={() => actualizarBorrador(u, "origen", key)}
-                            className={`w-8 h-8 rounded-lg text-[10px] font-black ${nuevosUsuarios[u]?.origen === key ? "bg-emerald-500 text-white" : "bg-black/20 text-slate-500"}`}
-                          >{letra}</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {resumen.usuariosNuevos.length > 0 && (
+            <Card icon={<CheckCircle2 size={15} className="text-emerald-400" />} title={`${resumen.usuariosNuevos.length} usuario(s) de Ganamos nuevo(s)`} subtitle="Se registran solos con su usuario de Ganamos como nombre, sin que haya que hacer nada">
+              <p className="text-[11px] text-slate-500">{resumen.usuariosNuevos.slice(0, 15).join(", ")}{resumen.usuariosNuevos.length > 15 ? `, y ${resumen.usuariosNuevos.length - 15} más` : ""}</p>
             </Card>
           )}
 
@@ -214,12 +185,12 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
                 key={shift.id}
                 icon={revisar.length > 0 ? <AlertTriangle size={15} className="text-amber-400" /> : <CheckCircle2 size={15} className="text-emerald-400" />}
                 title={`Cruce con lo que anotó el empleado — ${shift.fecha} ${shift.turno_label || ""}`}
-                subtitle={`${shift.responsable} · ${resultados.length - revisar.length}/${resultados.length} OK`}
+                subtitle={`${shift.responsable} · ${resultados.length - revisar.length}/${resultados.length} OK — así se resuelve el origen de cada carga`}
               >
                 <div className="space-y-1.5">
                   {resultados.map((r, i) => (
                     <div key={i} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${r.estado === "ok" ? "bg-white/5" : "bg-amber-500/10 ring-1 ring-amber-500/30"}`}>
-                      <span className="text-slate-400">{ORIGEN_OPCIONES.find(([k]) => k === r.origen)?.[1] || "?"} · {money(num(r.monto))} · {new Date(r.hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-slate-400">{ORIGEN_LETRA[r.origen] || "?"} · {money(num(r.monto))} · {new Date(r.hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
                       <span className={r.estado === "ok" ? "text-emerald-400" : "text-amber-400 font-bold"}>{r.detalle}</span>
                     </div>
                   ))}
@@ -229,9 +200,9 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
           })}
 
           <Card icon={<CheckCircle2 size={15} className="text-emerald-400" />} title={`${resumen.conTurno.length} operación(es) listas para importar`} subtitle={`En ${new Set(resumen.conTurno.map((f) => f.shift.id)).size} turno(s)`}>
-            {resumen.faltanDatos.length > 0 && (
-              <p className="text-[11px] text-amber-400 mb-2">
-                {resumen.faltanDatos.length} usuario(s) todavía sin nombre/origen — sus operaciones quedan afuera por ahora. Podés importar el resto ya, y pegar este mismo texto de nuevo más tarde cuando los completes (no se duplica lo que ya entró).
+            {cruces.length === 0 && (
+              <p className="text-[11px] text-slate-500 mb-2">
+                Ninguno de estos turnos tiene registros de carga rápida del empleado todavía, así que las cargas van a entrar sin origen (P/R/L) por ahora — se puede completar más adelante.
               </p>
             )}
             <button
@@ -239,7 +210,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
               disabled={importando || resumen.conTurno.length === 0}
               className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 font-bold py-2.5 rounded-lg text-xs disabled:opacity-40"
             >
-              {importando ? "Importando..." : resumen.faltanDatos.length > 0 ? "Importar lo que ya está completo" : "Confirmar importación"}
+              {importando ? "Importando..." : "Confirmar importación"}
             </button>
           </Card>
         </>
@@ -251,11 +222,6 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
             {resultado.importadas} operación(es) agregada(s) en {resultado.turnos} turno(s).
             {resultado.duplicadas > 0 && ` ${resultado.duplicadas} ya estaban importadas (se saltearon solas).`}
           </p>
-          {resultado.pendientesPorUsuario > 0 && (
-            <p className="text-xs text-amber-400 mt-1.5">
-              Quedaron afuera las operaciones de {resultado.pendientesPorUsuario} usuario(s) sin nombre/origen todavía. Pegá el mismo texto de nuevo cuando los completes.
-            </p>
-          )}
           {resultado.fallidas > 0 && (
             <p className="text-xs text-amber-400 mt-1.5">
               {resultado.fallidas} turno(s) no se pudieron actualizar{resultado.errorDetalle ? ` — ${resultado.errorDetalle}` : ""}. Probá de nuevo pegando la misma tabla; lo ya importado no se duplica.
