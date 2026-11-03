@@ -1188,6 +1188,45 @@ function PlataformaBreakdown({ porPlataforma }) {
   );
 }
 
+// El stock de inicio de un turno se fija una sola vez, al abrirlo (copiado del cierre
+// del turno anterior en ese momento). Si después se corrige el saldo real de Ganamos de
+// un turno anterior, los turnos que ya se habían abierto antes de esa corrección se
+// quedan con el número viejo para siempre — esto da una vía puntual para corregirlo.
+function CorregirFichasInicio({ shift, adminPin, onChange }) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  if (!editando) {
+    return (
+      <button onClick={() => { setValor(String(num((shift.stock_inicio || {}).G) || "")); setEditando(true); }} className="text-[10px] text-indigo-300 underline mt-1">
+        Corregir fichas GANA de inicio
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 mt-1">
+      <input
+        inputMode="numeric" value={valor} onChange={(e) => setValor(e.target.value.replace(/[^\d]/g, ""))}
+        className="w-28 bg-black/20 rounded px-2 py-1 text-[11px]" placeholder="0" autoFocus
+      />
+      <button
+        disabled={guardando || !valor}
+        onClick={async () => {
+          setGuardando(true);
+          await supabase.rpc("admin_corregir_stock_inicio", { input_admin_pin: adminPin, target_id: shift.id, plataforma: "G", nuevo_valor: valor });
+          setGuardando(false); setEditando(false);
+          onChange();
+        }}
+        className="text-[10px] font-bold text-emerald-400"
+      >
+        {guardando ? "..." : "Guardar"}
+      </button>
+      <button onClick={() => setEditando(false)} className="text-[10px] text-slate-500">Cancelar</button>
+    </div>
+  );
+}
+
 function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChange, basesActivity, publicidad }) {
   const s = c.shift;
   const ok = !c.hasError;
@@ -1245,6 +1284,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
             {s.stock_cierre?.G_reportado && (
               <p className="text-[10px] text-indigo-300 mt-1">GANA — el empleado anotó {money(num(s.stock_cierre.G_reportado))} al cerrar (referencia, sin verificar todavía)</p>
             )}
+            <CorregirFichasInicio shift={s} adminPin={adminPin} onChange={onChange} />
           </div>
           {(s.bajadas || []).length > 0 && (
             <div>
