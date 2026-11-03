@@ -188,7 +188,7 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
       const resultados = await Promise.all(entradas.map(([shiftId, ops]) =>
         supabase.rpc("admin_importar_ganamos_operaciones", {
           input_admin_pin: adminPin, target_shift_id: shiftId, nuevas_ops: ops,
-          nuevo_saldo_gana: saldoGanaPorTurno[shiftId] ? formatMiles(saldoGanaPorTurno[shiftId]) : null,
+          nuevo_saldo_gana: saldoGanaPorTurno[shiftId] ? formatMiles(String(Math.round(num(saldoGanaPorTurno[shiftId])))) : null,
         }).then((r) => ({ shiftId, ops, ...r }))
       ));
       // data ahora es la lista de ganamos_tx que se agregaron de verdad (no las que ya
@@ -307,11 +307,16 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
               {shiftsAImportar.map((shift) => (
                 <div key={shift.id} className="flex items-center gap-2">
                   <p className="text-[11px] text-slate-400 flex-1">{shift.fecha} {shift.turno_label || ""} · {shift.responsable}</p>
-                  <input
-                    inputMode="numeric" placeholder="Saldo Ganamos" value={saldoGanaPorTurno[shift.id] || ""}
-                    onChange={(e) => setSaldoGanaPorTurno((p) => ({ ...p, [shift.id]: formatMiles(e.target.value) }))}
-                    className="w-36 bg-black/20 rounded-lg px-2.5 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
+                  <div className="w-44 flex-none">
+                    <input
+                      inputMode="decimal" placeholder="Saldo Ganamos" value={saldoGanaPorTurno[shift.id] || ""}
+                      onChange={(e) => setSaldoGanaPorTurno((p) => ({ ...p, [shift.id]: e.target.value }))}
+                      className="w-full bg-black/20 rounded-lg px-2.5 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    {saldoGanaPorTurno[shift.id] && (
+                      <p className="text-[10px] text-slate-500 text-right mt-0.5">= {money(Math.round(num(saldoGanaPorTurno[shift.id])))}</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
