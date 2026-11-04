@@ -866,7 +866,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
           <BasesAdmin employees={employees} dbs={dbs} dbStats={dbStats} reactivables={reactivables} allContactsFlat={allContactsFlat} poolDisponible={poolDisponible} shifts={shifts} liveShifts={liveShifts} adminPin={adminPin} onChange={loadAll} />
         </>
       )}
-      {tab === "clientes" && <ClientesRanking computedAll={computedAll} />}
+      {tab === "clientes" && <ClientesRanking computedAll={computedAll} adminPin={adminPin} />}
       {tab === "empleados" && <EmployeeManager employees={employees} adminPin={adminPin} onChange={loadAll} />}
       {tab === "billeteras" && <WalletManager wallets={wallets} adminPin={adminPin} onChange={loadAll} />}
       {tab === "ganamos" && <GanamosImportTab adminPin={adminPin} shifts={shifts} onImported={loadAll} />}
@@ -2065,10 +2065,34 @@ function BaseFicha({ base, contacts, shifts, liveShifts, adminPin, onChange, onC
   );
 }
 
-function ClientesRanking({ computedAll }) {
+function ClientesRanking({ computedAll, adminPin }) {
   const [rangeKey, setRangeKey] = useState("todo");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [desdeReinicio, setDesdeReinicio] = useState(null);
+  const [reiniciando, setReiniciando] = useState(false);
+
+  // El historial viejo (de antes de tener Ganamos importado bien) puede traer nombres de
+  // cliente inconsistentes y ensuciar el ranking. En vez de borrar nada, se guarda una
+  // fecha de "reinicio": por defecto el ranking arranca a contar desde ahí, pero el
+  // historial completo sigue disponible eligiendo "Todo" o un rango manual.
+  useEffect(() => {
+    supabase.from("app_config").select("value").eq("key", "clientes_desde").then(({ data }) => {
+      const v = data?.[0]?.value || "";
+      setDesdeReinicio(v || null);
+      if (v) { setDateFrom(v); setRangeKey("custom"); }
+    });
+  }, []);
+
+  async function reiniciarContador() {
+    if (!window.confirm("¿Reiniciar el contador de clientes desde hoy? No borra nada — el historial de antes lo seguís viendo si elegís \"Todo\" o un rango manual, pero por defecto el ranking va a arrancar a contar de nuevo desde hoy.")) return;
+    setReiniciando(true);
+    const hoy = todayStr();
+    await supabase.rpc("admin_set_config", { input_admin_pin: adminPin, config_key: "clientes_desde", config_value: hoy });
+    setReiniciando(false);
+    setDesdeReinicio(hoy);
+    setDateFrom(hoy); setDateTo(""); setRangeKey("custom");
+  }
 
   function applyPreset(key) {
     setRangeKey(key);
@@ -2097,9 +2121,21 @@ function ClientesRanking({ computedAll }) {
   }, [computedAll, dateFrom, dateTo]);
 
   const sinDato = computedAll.every((c) => (c.shift.ops || []).every((o) => !o.cliente));
+  const tePierden = ranking.filter((r) => r.neto >= 0).length; // neto >= 0: el cliente dejó más de lo que sacó
+  const teGanan = ranking.filter((r) => r.neto < 0).length;
+  const netoTotal = ranking.reduce((s, r) => s + r.neto, 0);
 
   return (
     <>
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <p className="text-[11px] text-slate-500">
+          {desdeReinicio ? `Contando desde el reinicio del ${desdeReinicio}` : "Contando todo el historial"}
+        </p>
+        <button onClick={reiniciarContador} disabled={reiniciando} className="text-[10px] font-bold text-indigo-300 underline disabled:opacity-40">
+          {reiniciando ? "..." : "Reiniciar contador desde hoy"}
+        </button>
+      </div>
+
       <DateRangeFilter rangeKey={rangeKey} dateFrom={dateFrom} dateTo={dateTo} onPreset={applyPreset} onFrom={(v) => { setRangeKey("custom"); setDateFrom(v); }} onTo={(v) => { setRangeKey("custom"); setDateTo(v); }} />
 
       {sinDato ? (
@@ -2107,7 +2143,13 @@ function ClientesRanking({ computedAll }) {
           <p className="text-slate-500 text-xs">Es un campo opcional — apenas empiecen a completarlo (aunque sea de a poco), acá va a aparecer el ranking real de quién te deja más plata.</p>
         </Card>
       ) : (
-        <Card icon={<Users size={15} />} title="Ranking de clientes" subtitle={`${ranking.length} identificados en el período`}>
+        <>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <StatBox label="Clientes" value={ranking.length} />
+          <StatBox label="Te dejan plata" value={tePierden} positive />
+          <StatBox label="Te ganan plata" value={teGanan} negative />
+        </div>
+        <Card icon={<Users size={15} />} title="Ranking de clientes" subtitle={`Neto del período: ${money(netoTotal)}`}>
           <div className="space-y-1.5 max-h-[32rem] overflow-y-auto">
             {ranking.map((r, i) => (
               <div key={r.cliente} className="flex items-center justify-between bg-white/[0.02] ring-1 ring-white/5 rounded-lg px-3 py-2 text-xs">
@@ -2123,6 +2165,7 @@ function ClientesRanking({ computedAll }) {
             ))}
           </div>
         </Card>
+        </>
       )}
     </>
   );
