@@ -2107,7 +2107,7 @@ function ClientesRanking({ computedAll, adminPin }) {
   };
   const [ordenPor, setOrdenPor] = useState("perdio");
 
-  const ranking = useMemo(() => {
+  const clientesBase = useMemo(() => {
     const map = {};
     computedAll.forEach((c) => {
       const s = c.shift;
@@ -2123,10 +2123,12 @@ function ClientesRanking({ computedAll, adminPin }) {
         if (s.fecha > map[cliente].ultima) map[cliente].ultima = s.fecha;
       });
     });
-    return Object.entries(map)
-      .map(([cliente, d]) => ({ cliente, ...d, ops: d.cargasCount + d.premiosCount, neto: d.cargas - d.premios }))
-      .sort(ORDENES[ordenPor].sort);
-  }, [computedAll, dateFrom, dateTo, ordenPor]);
+    return Object.entries(map).map(([cliente, d]) => ({ cliente, ...d, ops: d.cargasCount + d.premiosCount, neto: d.cargas - d.premios }));
+  }, [computedAll, dateFrom, dateTo]);
+
+  const ranking = useMemo(() => [...clientesBase].sort(ORDENES[ordenPor].sort), [clientesBase, ordenPor]);
+  const topVeces = useMemo(() => [...clientesBase].sort(ORDENES.vecesCargado.sort).slice(0, 15), [clientesBase]);
+  const topMonto = useMemo(() => [...clientesBase].sort(ORDENES.montoCargado.sort).slice(0, 15), [clientesBase]);
 
   const sinDato = computedAll.every((c) => (c.shift.ops || []).every((o) => !o.cliente));
   const tePierden = ranking.filter((r) => r.neto >= 0).length; // neto >= 0: el cliente dejó más de lo que sacó
@@ -2157,6 +2159,30 @@ function ClientesRanking({ computedAll, adminPin }) {
           <StatBox label="Te dejan plata" value={tePierden} positive />
           <StatBox label="Te ganan plata" value={teGanan} negative />
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <Card icon={<Users size={15} />} title="Top 15 — Más cargó (veces)">
+            <div className="space-y-1">
+              {topVeces.map((r, i) => (
+                <div key={r.cliente} className="flex items-center justify-between text-xs py-1">
+                  <span className="truncate"><span className="text-slate-600 font-bold w-5 inline-block">{i + 1}</span> {r.cliente}</span>
+                  <span className="font-black flex-none">{r.cargasCount}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card icon={<Users size={15} />} title="Top 15 — Más cargó ($)">
+            <div className="space-y-1">
+              {topMonto.map((r, i) => (
+                <div key={r.cliente} className="flex items-center justify-between text-xs py-1">
+                  <span className="truncate"><span className="text-slate-600 font-bold w-5 inline-block">{i + 1}</span> {r.cliente}</span>
+                  <span className="font-black flex-none">{money(r.cargas)}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
         <div className="flex gap-1.5 flex-wrap mb-3">
           {Object.entries(ORDENES).map(([key, o]) => (
             <Pill key={key} active={ordenPor === key} onClick={() => setOrdenPor(key)}>{o.label}</Pill>
