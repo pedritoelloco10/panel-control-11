@@ -517,7 +517,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
                 <div className="text-center"><p className="text-lg font-black text-indigo-300">{ahoraMismo.mensajesPublicidad}</p><p className="text-[9px] text-slate-500 uppercase">Msj. publicidad</p></div>
                 <div className="text-center">
                   <p className="text-lg font-black">{ahoraMismo.origenP}</p>
-                  <p className="text-[9px] text-slate-500 uppercase">P · Nuevo</p>
+                  <p className="text-[9px] text-slate-500 uppercase">P · Publicidad</p>
                   {ahoraMismo.origenPMonto > 0 && <p className="text-[10px] text-emerald-400 font-bold">{money(ahoraMismo.origenPMonto)}</p>}
                 </div>
                 <div className="text-center">
@@ -527,7 +527,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
                 </div>
                 <div className="text-center">
                   <p className="text-lg font-black">{ahoraMismo.origenL}</p>
-                  <p className="text-[9px] text-slate-500 uppercase">L · Lista</p>
+                  <p className="text-[9px] text-slate-500 uppercase">L · Listas</p>
                   {ahoraMismo.origenLMonto > 0 && <p className="text-[10px] text-emerald-400 font-bold">{money(ahoraMismo.origenLMonto)}</p>}
                 </div>
               </div>
