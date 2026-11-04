@@ -265,7 +265,11 @@ export function useTurnoDraft(identity) {
     // pasaba el chequeo de "completo" y después se convertía en 0 en silencio al
     // calcularse los totales — un cierre que parecía completo pero en realidad
     // arrastraba un cero disfrazado al turno siguiente.
-    const esNumero = (v) => typeof v === "string" && /^\d+$/.test(v.replace(/\./g, ""));
+    // Permite un signo "-" adelante: las fichas GANA se autocompletan con una estimación
+    // en vivo que puede dar negativa (ej. un turno largo con muchos retiros) — antes eso
+    // rompía la validación en silencio y bloqueaba el cierre con un mensaje que no
+    // explicaba por qué, aunque el empleado hubiera cargado todo bien.
+    const esNumero = (v) => typeof v === "string" && /^-?\d+$/.test(v.replace(/\./g, ""));
     const walletNames = (currentWallets || []).map((w) => w.nombre);
     const billCierreCompleto = walletNames.length === 0 || walletNames.every((nombre) => esNumero(billCierre[nombre]));
     const stockCierreCompleto = esNumero(stockCierreInf.B) && esNumero(stockCierreInf.G);
