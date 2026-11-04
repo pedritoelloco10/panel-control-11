@@ -128,7 +128,17 @@ export function useTurnoDraft(identity) {
       }
       const prev = lastClosed && lastClosed[0];
       const carriedBill = prev ? prev.bill_cierre || {} : {};
-      const carriedStock = prev ? prev.stock_cierre || { B: "", G: "" } : { B: "", G: "" };
+      // Para GANA: si el turno anterior ya tiene saldo real importado por Admin (marcado
+      // con G_real), ese manda, como siempre. Si todavía no se importó, es mejor arrancar
+      // con lo que el empleado anotó que vio en Ganamos al cerrar (G_reportado) — un dato
+      // real, aunque no esté verificado — en vez de la estimación circular interna, que es
+      // la que venía arrastrando mal turno tras turno. Cuando Admin importa el turno
+      // anterior, la propagación automática corrige esto igual, sin depender de este
+      // arrastre (y este chequeo evita que un G_reportado viejo pise un saldo ya real).
+      const prevStockCierre = prev ? prev.stock_cierre || {} : {};
+      const carriedStock = prev
+        ? { ...prevStockCierre, G: prevStockCierre.G_real ? prevStockCierre.G : (prevStockCierre.G_reportado || prevStockCierre.G || "") }
+        : { B: "", G: "" };
       if (prev) setCarriedFrom({ fecha: prev.fecha, hora: prev.hora_fin || prev.hora_inicio, responsable: prev.responsable });
       else setCarriedFrom(null);
 
