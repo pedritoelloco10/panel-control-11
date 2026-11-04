@@ -375,6 +375,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
         G: { ventas: 0, premios: 0, bono: 0, cargasCount: 0, retirosCount: 0, origenP: 0, origenR: 0, origenL: 0 },
       };
       let origenP = 0, origenR = 0, origenL = 0;
+      let origenPMonto = 0, origenRMonto = 0, origenLMonto = 0;
       (live.ops || []).forEach((o) => {
         const m = num(o.monto);
         if (o.tipo === "carga") {
@@ -384,27 +385,40 @@ export default function AdminDashboard({ adminPin, onExit }) {
           else if (o.origen === "lista") { origenL++; porPlataforma[o.plataforma].origenL++; }
         }
         else if (o.tipo === "bono") { stockDelta[o.plataforma] -= m; porPlataforma[o.plataforma].bono += m; }
-        else if (o.tipo === "registro_rapido") { /* no es plata real todavía, no mueve stock — ver nota en computeShift */ }
+        else if (o.tipo === "registro_rapido") {
+          // No es plata real todavía (no mueve stock, ver nota en computeShift) — pero es
+          // lo único que el empleado carga en vivo ahora, así que acá sí sirve para contar
+          // cuántas P/R/L van y cuánto monto representan en lo que va del turno.
+          if (o.origen === "nuevo") { origenP++; origenPMonto += m; }
+          else if (o.origen === "derivado") { origenR++; origenRMonto += m; }
+          else if (o.origen === "lista") { origenL++; origenLMonto += m; }
+        }
         else { retirosTotal += m; stockDelta[o.plataforma] += m; porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
       });
       const bajadasTotal = (live.bajadas || []).reduce((s, b) => s + num(b.monto), 0);
       const bajadasFichas = (live.bajadas || []).filter((b) => b.destino === "Compra de fichas").reduce((s, b) => s + num(b.monto), 0);
       const bajadasGasto = (live.bajadas || []).filter((b) => b.destino === "Gasto de oficina").reduce((s, b) => s + num(b.monto), 0);
       const bajadasEfectivo = bajadasTotal - bajadasFichas - bajadasGasto;
-      const cajaTotal = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal;
-      const fichas = {};
-      PLATFORMS.forEach((p) => {
-        const stockIni = num((live.stock_inicio || {})[p.key]);
-        const mov = (live.movs || []).filter((m) => m.plataforma === p.key).reduce((s, m) => s + num(m.monto), 0);
-        fichas[p.key] = stockIni + stockDelta[p.key] + mov;
+      // Caja aproximada: ya casi no se cargan operaciones en vivo, así que estimarla a partir
+      // de ellas (como antes) queda inútil. En cambio, se suma billetera por billetera lo que
+      // el empleado ya tipeó en "Billeteras — cierre" (se autoguarda solo cada pocos segundos,
+      // aunque el turno siga abierto) y, para las que todavía no tocó, se asume que siguen
+      // como arrancaron — da un total aproximado sin que haga falta cerrar nada.
+      const wallets = new Set([...Object.keys(live.bill_inicio || {}), ...Object.keys(live.bill_cierre || {})]);
+      let cajaTotal = 0, billeterasSinActualizar = 0;
+      wallets.forEach((w) => {
+        const cierre = (live.bill_cierre || {})[w];
+        if (cierre !== undefined && cierre !== "") cajaTotal += num(cierre);
+        else { cajaTotal += num((live.bill_inicio || {})[w]); billeterasSinActualizar++; }
       });
       const baseStats = empTodayBaseStats[live.responsable] || { contactados: 0, contestados: 0, cargaron: 0 };
       return {
-        enVivo: true, responsable: live.responsable, cajaTotal, ventasTurno: ventasTotal, premiosTurno: retirosTotal, fichas, porPlataforma,
+        enVivo: true, responsable: live.responsable, cajaTotal, cajaAproximada: true, billeterasSinActualizar, totalBilleteras: wallets.size,
+        ventasTurno: ventasTotal, premiosTurno: retirosTotal, porPlataforma,
         bajadasTotal, bajadasFichas, bajadasGasto, bajadasEfectivo,
         contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
-        movimientos: (live.ops || []).length, opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
-        origenP, origenR, origenL, mensajesPublicidad: publicidadByShift[live.id] || 0,
+        opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
+        origenP, origenR, origenL, origenPMonto, origenRMonto, origenLMonto, mensajesPublicidad: publicidadByShift[live.id] || 0,
       };
     }
     if (shifts.length) {
@@ -468,42 +482,16 @@ export default function AdminDashboard({ adminPin, onExit }) {
               subtitle={ahoraMismo.enVivo ? `Turno en vivo · ${ahoraMismo.responsable}` : `Sin turno abierto · según el último cierre de ${ahoraMismo.responsable}`}
               right={ahoraMismo.enVivo ? <span className="text-[9px] bg-emerald-500/15 text-emerald-400 rounded-full px-2 py-0.5 font-bold animate-pulse">EN VIVO</span> : null}
             >
-              <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Caja total ahora</p>
-              <p className="text-3xl font-black text-emerald-400 mb-3">{money(ahoraMismo.cajaTotal)}</p>
-              <div className="grid grid-cols-4 gap-2 mb-2">
-                <div className="bg-white/5 rounded-lg p-2.5 text-center">
-                  <p className="text-[9px] text-slate-500 uppercase">Vendido</p>
-                  <p className="text-base font-black text-emerald-400">{money(ahoraMismo.ventasTurno)}</p>
-                </div>
-                <div className="bg-white/5 rounded-lg p-2.5 text-center">
-                  <p className="text-[9px] text-slate-500 uppercase">Premios</p>
-                  <p className="text-base font-black text-rose-400">{money(ahoraMismo.premiosTurno)}</p>
-                </div>
-                <div className="bg-white/5 rounded-lg p-2.5 text-center">
-                  <p className="text-[9px] text-slate-500 uppercase">Neto</p>
-                  <p className={`text-base font-black ${(ahoraMismo.ventasTurno - ahoraMismo.premiosTurno) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                    {money(ahoraMismo.ventasTurno - ahoraMismo.premiosTurno)}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setOpsModal({ title: `${ahoraMismo.responsable} · ${ahoraMismo.enVivo ? "en vivo" : "último cierre"}`, ops: ahoraMismo.ops, live: ahoraMismo.enVivo })}
-                  className="bg-white/5 rounded-lg p-2.5 text-center ring-1 ring-transparent hover:ring-indigo-400/40"
-                >
-                  <p className="text-[9px] text-slate-500 uppercase">Operaciones</p>
-                  <p className="text-base font-black text-indigo-300 underline">{ahoraMismo.opsCount}</p>
-                </button>
-              </div>
-              <PlataformaBreakdown porPlataforma={ahoraMismo.porPlataforma} />
-              {ahoraMismo.fichas && (
-                <div className="grid grid-cols-2 gap-2 mt-2 mb-2">
-                  {PLATFORMS.map((p) => (
-                    <div key={p.key} className="flex justify-between bg-white/5 rounded-lg px-2.5 py-1.5 text-[11px]">
-                      <span className="text-slate-500">Fichas {p.label} restantes</span>
-                      <span className="font-bold">{Math.round(ahoraMismo.fichas[p.key]).toLocaleString("es-AR")}</span>
-                    </div>
-                  ))}
-                </div>
+              <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Caja aproximada ahora</p>
+              <p className="text-3xl font-black text-emerald-400 mb-1">{money(ahoraMismo.cajaTotal)}</p>
+              {ahoraMismo.cajaAproximada && (
+                <p className="text-[10px] text-slate-600 mb-3">
+                  {ahoraMismo.billeterasSinActualizar > 0
+                    ? `${ahoraMismo.totalBilleteras - ahoraMismo.billeterasSinActualizar}/${ahoraMismo.totalBilleteras} billeteras actualizadas — el resto se asume igual que al arrancar`
+                    : `${ahoraMismo.totalBilleteras}/${ahoraMismo.totalBilleteras} billeteras actualizadas`}
+                </p>
               )}
+              {!ahoraMismo.cajaAproximada && <div className="mb-3" />}
               {ahoraMismo.bajadasTotal > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   <div className="bg-white/5 rounded-lg px-2.5 py-1.5 text-center">
@@ -520,17 +508,28 @@ export default function AdminDashboard({ adminPin, onExit }) {
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-4 gap-2 mt-2">
+              <div className="grid grid-cols-3 gap-2 mt-2">
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.contactaron}</p><p className="text-[9px] text-slate-500 uppercase">Contactaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.contestaron}</p><p className="text-[9px] text-slate-500 uppercase">Contestaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.cargaron}</p><p className="text-[9px] text-slate-500 uppercase">Cargaron</p></div>
-                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.movimientos}</p><p className="text-[9px] text-slate-500 uppercase">Movimientos (cargas+retiros)</p></div>
               </div>
               <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-white/5">
                 <div className="text-center"><p className="text-lg font-black text-indigo-300">{ahoraMismo.mensajesPublicidad}</p><p className="text-[9px] text-slate-500 uppercase">Msj. publicidad</p></div>
-                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenP}</p><p className="text-[9px] text-slate-500 uppercase">P · Nuevo</p></div>
-                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenR}</p><p className="text-[9px] text-slate-500 uppercase">R · Referido</p></div>
-                <div className="text-center"><p className="text-lg font-black">{ahoraMismo.origenL}</p><p className="text-[9px] text-slate-500 uppercase">L · Lista</p></div>
+                <div className="text-center">
+                  <p className="text-lg font-black">{ahoraMismo.origenP}</p>
+                  <p className="text-[9px] text-slate-500 uppercase">P · Nuevo</p>
+                  {ahoraMismo.origenPMonto > 0 && <p className="text-[10px] text-emerald-400 font-bold">{money(ahoraMismo.origenPMonto)}</p>}
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-black">{ahoraMismo.origenR}</p>
+                  <p className="text-[9px] text-slate-500 uppercase">R · Referido</p>
+                  {ahoraMismo.origenRMonto > 0 && <p className="text-[10px] text-emerald-400 font-bold">{money(ahoraMismo.origenRMonto)}</p>}
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-black">{ahoraMismo.origenL}</p>
+                  <p className="text-[9px] text-slate-500 uppercase">L · Lista</p>
+                  {ahoraMismo.origenLMonto > 0 && <p className="text-[10px] text-emerald-400 font-bold">{money(ahoraMismo.origenLMonto)}</p>}
+                </div>
               </div>
             </Card>
           )}
