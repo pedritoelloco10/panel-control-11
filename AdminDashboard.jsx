@@ -4,7 +4,7 @@ import {
   ArrowLeft, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle,
   Pencil, X, Plus, Upload, Coins, Star, Search, Power, DollarSign, Clock,
 } from "lucide-react";
-import { Card, StatBox, MiniStat } from "./ui";
+import { Card, StatBox, MiniStat, Pill } from "./ui";
 import { supabase } from "./supabaseClient";
 import { PLATFORMS, FUENTE_TYPES, LEAD_STATES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno, formatMiles } from "./lib";
 import GanamosImportTab from "./GanamosImportTab";
@@ -2099,6 +2099,14 @@ function ClientesRanking({ computedAll, adminPin }) {
     applyPresetRango(key, setDateFrom, setDateTo);
   }
 
+  const ORDENES = {
+    perdio: { label: "Más te dejó (perdió)", sort: (a, b) => b.neto - a.neto },
+    gano: { label: "Más te ganó", sort: (a, b) => a.neto - b.neto },
+    montoCargado: { label: "Más cargó ($)", sort: (a, b) => b.cargas - a.cargas },
+    vecesCargado: { label: "Más cargó (veces)", sort: (a, b) => b.cargasCount - a.cargasCount },
+  };
+  const [ordenPor, setOrdenPor] = useState("perdio");
+
   const ranking = useMemo(() => {
     const map = {};
     computedAll.forEach((c) => {
@@ -2109,16 +2117,16 @@ function ClientesRanking({ computedAll, adminPin }) {
         const cliente = (o.cliente || "").trim();
         if (!cliente || o.tipo === "bono" || o.tipo === "registro_rapido") return; // ninguno de los dos es carga/premio real del cliente, se dejan afuera de este ranking
         const m = num(o.monto);
-        if (!map[cliente]) map[cliente] = { cargas: 0, premios: 0, ops: 0, ultima: s.fecha };
-        if (o.tipo === "carga") map[cliente].cargas += m; else map[cliente].premios += m;
-        map[cliente].ops++;
+        if (!map[cliente]) map[cliente] = { cargas: 0, cargasCount: 0, premios: 0, premiosCount: 0, ultima: s.fecha };
+        if (o.tipo === "carga") { map[cliente].cargas += m; map[cliente].cargasCount++; }
+        else { map[cliente].premios += m; map[cliente].premiosCount++; }
         if (s.fecha > map[cliente].ultima) map[cliente].ultima = s.fecha;
       });
     });
     return Object.entries(map)
-      .map(([cliente, d]) => ({ cliente, ...d, neto: d.cargas - d.premios }))
-      .sort((a, b) => b.neto - a.neto);
-  }, [computedAll, dateFrom, dateTo]);
+      .map(([cliente, d]) => ({ cliente, ...d, ops: d.cargasCount + d.premiosCount, neto: d.cargas - d.premios }))
+      .sort(ORDENES[ordenPor].sort);
+  }, [computedAll, dateFrom, dateTo, ordenPor]);
 
   const sinDato = computedAll.every((c) => (c.shift.ops || []).every((o) => !o.cliente));
   const tePierden = ranking.filter((r) => r.neto >= 0).length; // neto >= 0: el cliente dejó más de lo que sacó
@@ -2149,6 +2157,11 @@ function ClientesRanking({ computedAll, adminPin }) {
           <StatBox label="Te dejan plata" value={tePierden} positive />
           <StatBox label="Te ganan plata" value={teGanan} negative />
         </div>
+        <div className="flex gap-1.5 flex-wrap mb-3">
+          {Object.entries(ORDENES).map(([key, o]) => (
+            <Pill key={key} active={ordenPor === key} onClick={() => setOrdenPor(key)}>{o.label}</Pill>
+          ))}
+        </div>
         <Card icon={<Users size={15} />} title="Ranking de clientes" subtitle={`Neto del período: ${money(netoTotal)}`}>
           <div className="space-y-1.5 max-h-[32rem] overflow-y-auto">
             {ranking.map((r, i) => (
@@ -2157,10 +2170,16 @@ function ClientesRanking({ computedAll, adminPin }) {
                   <span className="text-slate-600 font-bold w-5 flex-none">{i + 1}</span>
                   <div className="min-w-0">
                     <p className="font-bold truncate">···{r.cliente}</p>
-                    <p className="text-[10px] text-slate-500">{r.ops} operaciones · última {r.ultima}</p>
+                    <p className="text-[10px] text-slate-500">
+                      {r.cargasCount} carga{r.cargasCount !== 1 ? "s" : ""} ({money(r.cargas)}) · {r.premiosCount} retiro{r.premiosCount !== 1 ? "s" : ""} ({money(r.premios)}) · última {r.ultima}
+                    </p>
                   </div>
                 </div>
-                <p className={`font-black flex-none ${r.neto >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{money(r.neto)}</p>
+                <p className={`font-black flex-none ${
+                  ordenPor === "montoCargado" ? "text-slate-200" : ordenPor === "vecesCargado" ? "text-slate-200" : r.neto >= 0 ? "text-emerald-400" : "text-rose-400"
+                }`}>
+                  {ordenPor === "montoCargado" ? money(r.cargas) : ordenPor === "vecesCargado" ? r.cargasCount : money(r.neto)}
+                </p>
               </div>
             ))}
           </div>
