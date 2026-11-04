@@ -78,7 +78,12 @@ export function dedupeOpsIds(ops) {
   return changed ? next : ops;
 }
 export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // OJO: nunca usar toISOString() acá — es siempre en UTC. Entre las 21:00 y las 23:59
+  // hora Argentina (UTC-3) ya es el día siguiente en UTC, así que un turno Noche abierto
+  // a esa hora quedaba fechado un día adelantado (ej: abierto 22:05 del 3/11 quedaba
+  // guardado como 4/11) — se arma la fecha a mano con los componentes locales.
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 export function nowStr() {
   return new Date().toTimeString().slice(0, 5);
