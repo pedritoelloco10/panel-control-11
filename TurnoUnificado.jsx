@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Users, Wallet, Coins, TrendingUp, CheckCircle2, Save, Trash2, Plus, Lock, WifiOff, AlertTriangle, Megaphone } from "lucide-react";
-import { Card, Field, Badge } from "./ui";
-import { PLATFORMS, num, money, classifyTurno, uid, formatMiles } from "./lib";
+import { Card, Field } from "./ui";
+import { num, money, classifyTurno, uid, formatMiles } from "./lib";
 import { supabase } from "./supabaseClient";
 
 // Pantalla única para el empleado — reemplaza Turno + Operaciones por algo más liviano:
@@ -31,7 +31,7 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
     ready, meta, setMeta, billInicio, billCierre, setBillCierre,
     stockInicio, stockCierreInf, setStockCierreInf,
     ops, setOps, bajadas, setBajadas, movs, setMovs, notas, setNotas,
-    expected, cierreCheck, saving, error, saved, autosaveError, submitTurno,
+    expected, saving, error, saved, autosaveError, submitTurno,
     carriedFrom, otherOpenBy, refuerzoPropioAbierto, loadError,
   } = draft;
 
@@ -158,13 +158,10 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
           ))}
         </div>
         <div className="grid grid-cols-2 gap-2 mt-2">
-          {PLATFORMS.map((p) => (
-            <div key={p.key} className="bg-black/20 rounded-lg px-2.5 py-2">
-              <p className="text-[9px] text-slate-500 uppercase mb-0.5">Fichas {p.label} — inicio</p>
-              <p className="text-sm font-bold">{money(num(stockInicio[p.key] || 0))}</p>
-              {p.key === "B" && <p className="text-[10px] text-indigo-300 font-bold">Esperado ahora: {money(expected.stock[p.key])}</p>}
-            </div>
-          ))}
+          <div className="bg-black/20 rounded-lg px-2.5 py-2">
+            <p className="text-[9px] text-slate-500 uppercase mb-0.5">Fichas GANA — inicio</p>
+            <p className="text-sm font-bold">{money(num(stockInicio.G || 0))}</p>
+          </div>
         </div>
       </Card>
 
@@ -181,13 +178,12 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
         {pubError && <p className="text-[10px] text-rose-400 mt-1">No se pudo actualizar — probá de nuevo.</p>}
       </Card>
 
-      <Card icon={<Plus size={15} />} title="Cargas del turno" subtitle='Elegí P/R/L (Ganamos) o B (Bet) y poné el monto — la hora se pone sola'>
+      <Card icon={<Plus size={15} />} title="Cargas del turno" subtitle='Elegí P/R/L y poné el monto — la hora se pone sola'>
         <div className="space-y-1.5">
           {slots.map((o, i) => (
             <SlotRow key={o.id} o={o} index={i} total={slots.length} onUpdate={updateSlot} onRemove={removeSlot} />
           ))}
         </div>
-        <p className="text-[10px] text-slate-600 mt-2">B es temporal, mientras siga en uso Bet — todo lo demás de Ganamos entra solo con la importación.</p>
       </Card>
 
       <Card icon={<TrendingUp size={15} className="rotate-180" />} title="Bajadas y movimientos">
@@ -207,7 +203,7 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
           items={movs} setItems={setMovs} addLabel="Agregar compra"
           fields={[
             { key: "tipo", type: "select", options: ["Compra"], placeholder: "Tipo" },
-            { key: "plataforma", type: "select", options: ["B", "G"], placeholder: "Plataforma" },
+            { key: "plataforma", type: "select", options: ["G"], placeholder: "Plataforma" },
             { key: "monto", type: "text", placeholder: "Monto (±)", numeric: true },
             { key: "nota", type: "text", placeholder: "Nota" },
           ]}
@@ -234,13 +230,6 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
       </Card>
 
       <Card icon={<Coins size={15} />} title="Stock de fichas — cierre">
-        <Field label="BET — cierre (informado a mano)">
-          <input
-            inputMode="numeric" value={stockCierreInf.B}
-            onChange={(e) => setStockCierreInf({ ...stockCierreInf, B: formatMiles(e.target.value) })}
-            placeholder="0" className="input"
-          />
-        </Field>
         <Field label="GANA — saldo que ves ahora en Ganamos (opcional)">
           <input
             inputMode="numeric" value={stockCierreInf.G_reportado || ""}
@@ -250,16 +239,6 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
         </Field>
         <p className="text-[10px] text-slate-600 mt-2">No hace falta que lo calcules ni que cierre con nada — solo copiá el número que ves en Ganamos en este momento, para que tu encargado lo tenga de referencia cuando haga la verificación real.</p>
       </Card>
-
-      {cierreCheck.anyCierreData && (
-        <Card icon={<CheckCircle2 size={15} />} title="Control de cierre" subtitle="Fichas de Bet — lo único que se verifica acá">
-          <div className="bg-black/20 rounded-xl p-2.5 text-center">
-            <p className="text-[10px] text-slate-500 mb-1">Fichas BET</p>
-            <Badge ok={Math.abs(cierreCheck.diffFichas.B) < 1} textBad={`Dif. ${money(cierreCheck.diffFichas.B)}`} />
-          </div>
-          <p className="text-[10px] text-slate-600 mt-2">El efectivo y las fichas de Ganamos los verifica tu encargado aparte.</p>
-        </Card>
-      )}
 
       <Card icon={<Users size={15} />} title="Cierre">
         <Field label="Hora de fin"><input type="time" value={meta.horaFin} onChange={(e) => setMeta({ ...meta, horaFin: e.target.value })} className="input mb-3" /></Field>
@@ -282,27 +261,15 @@ const ORIGEN_LETRAS = [["nuevo", "P"], ["derivado", "R"], ["lista", "L"]];
 
 const SlotRow = React.memo(function SlotRow({ o, index, total, onUpdate, onRemove }) {
   const hasData = o.monto !== "";
-  const esBet = o.plataforma === "B";
   const patch = (p) => onUpdate(o.id, p, index);
 
   function elegirOrigen(v) {
     if (o.origen === v && o.tipo === "registro_rapido") { patch({ tipo: null, origen: null }); return; }
     patch({ tipo: "registro_rapido", origen: v, plataforma: null, hora: o.hora || new Date().toISOString() });
   }
-  function elegirBet() {
-    if (esBet) { patch({ tipo: null, plataforma: null, origen: null }); return; }
-    patch({ tipo: "carga", plataforma: "B", origen: null, hora: o.hora || new Date().toISOString() });
-  }
   function onMontoChange(v) {
-    if (esBet) {
-      const neg = v.trim().startsWith("-");
-      const digits = v.replace(/[^\d]/g, "");
-      patch({ monto: digits ? formatMiles(digits) : "", tipo: neg ? "retiro" : "carga" });
-    } else {
-      patch({ monto: formatMiles(v) });
-    }
+    patch({ monto: formatMiles(v) });
   }
-  const montoMostrado = esBet && o.tipo === "retiro" && o.monto ? `-${o.monto}` : o.monto;
   const puedeTipear = o.tipo !== null;
 
   return (
@@ -314,14 +281,13 @@ const SlotRow = React.memo(function SlotRow({ o, index, total, onUpdate, onRemov
       </div>
       <div className="flex-1 min-w-0">
         <input
-          inputMode="numeric" placeholder={puedeTipear ? "Monto" : "Elegí P/R/L o B"} value={montoMostrado}
+          inputMode="numeric" placeholder={puedeTipear ? "Monto" : "Elegí P/R/L"} value={o.monto}
           disabled={!puedeTipear}
           onChange={(e) => onMontoChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && index === total - 1 && o.monto !== "") document.activeElement.blur(); }}
           className="input !py-2 text-sm disabled:opacity-40"
         />
       </div>
-      <button onClick={elegirBet} className={`w-9 h-9 rounded-lg text-xs font-black flex-none ${esBet ? "bg-amber-500 text-white" : "bg-white/5 text-slate-400"}`}>B</button>
       {hasData && (
         <button onClick={() => onRemove(o.id)} className="text-slate-700 hover:text-rose-400 flex-none"><Trash2 size={14} /></button>
       )}

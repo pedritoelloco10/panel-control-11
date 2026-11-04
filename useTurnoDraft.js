@@ -282,10 +282,10 @@ export function useTurnoDraft(identity) {
     const esNumero = (v) => typeof v === "string" && /^-?\d+$/.test(v.replace(/\./g, ""));
     const walletNames = (currentWallets || []).map((w) => w.nombre);
     const billCierreCompleto = walletNames.length === 0 || walletNames.every((nombre) => esNumero(billCierre[nombre]));
-    const stockCierreCompleto = esNumero(stockCierreInf.B) && esNumero(stockCierreInf.G);
+    const stockCierreCompleto = esNumero(stockCierreInf.G);
 
     if (!billCierreCompleto || !stockCierreCompleto) {
-      setError("Antes de cerrar el turno tenés que cargar todas las billeteras y las fichas de cierre (B y G).");
+      setError("Antes de cerrar el turno tenés que cargar todas las billeteras.");
       return false;
     }
 
