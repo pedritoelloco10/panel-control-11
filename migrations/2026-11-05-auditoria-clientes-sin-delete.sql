@@ -14,9 +14,22 @@
 --   .upsert({ identificador })... (agregar uno nuevo)
 -- Ninguna de las dos necesita DELETE, así que se achica el permiso a
 -- lectura + insertar + actualizar, nomás. Nada deja de funcionar.
+--
+-- NOTA: en producción esto ya estaba resuelto (quedó corregido en algún
+-- momento sin que quedara una migración) — schema.sql tenía el nombre
+-- viejo de la política ("acceso app") desactualizado. Queda con
+-- IF EXISTS / nombres fijos para que sea idempotente: no rompe si se
+-- corre sobre la base real (ya sin "acceso app") ni sobre una base
+-- nueva creada desde schema.sql (que sí trae "acceso app").
 -- ============================================================
 
-drop policy "acceso app" on clientes;
+drop policy if exists "acceso app" on clientes;
+drop policy if exists "clientes select" on clientes;
+drop policy if exists "clientes insert" on clientes;
+drop policy if exists "clientes update" on clientes;
+drop policy if exists "clientes leer" on clientes;
+drop policy if exists "clientes insertar" on clientes;
+drop policy if exists "clientes actualizar" on clientes;
 
 create policy "clientes leer" on clientes for select using (true);
 create policy "clientes insertar" on clientes for insert with check (true);
