@@ -26,39 +26,48 @@ function seedSlots(n) {
   return Array.from({ length: n }, blankSlot);
 }
 
+// Contador +/- reusable para publicidad_eventos, distinguido por "tipo" ("mensaje"
+// o "carga") — las mismas 3 RPCs de siempre, con el parámetro p_tipo nuevo.
+function usePublicidadCounter(identity, tipo) {
+  const [count, setCount] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    if (!identity?.token) return;
+    supabase.rpc("session_count_publicidad_hoy", { input_token: identity.token, p_tipo: tipo }).then(({ data }) => setCount(data ?? 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity?.token]);
+  async function add() {
+    if (loading) return;
+    setLoading(true); setError(false);
+    const { data: ok, error: err } = await supabase.rpc("session_add_publicidad_evento", { input_token: identity.token, p_tipo: tipo });
+    if (err || ok === false) setError(true); else setCount((n) => (n ?? 0) + 1);
+    setTimeout(() => setLoading(false), 500);
+  }
+  async function remove() {
+    if (loading) return;
+    setLoading(true); setError(false);
+    const { data: ok, error: err } = await supabase.rpc("session_remove_publicidad_evento", { input_token: identity.token, p_tipo: tipo });
+    if (err) setError(true); else if (ok) setCount((n) => Math.max(0, (n ?? 0) - 1));
+    setTimeout(() => setLoading(false), 500);
+  }
+  return { count, loading, error, add, remove };
+}
+
 export default function TurnoUnificado({ wallets, draft, identity }) {
   const {
     ready, meta, setMeta, billInicio, billCierre, setBillCierre,
-    stockInicio, stockCierreInf, setStockCierreInf,
+    stockCierreInf, setStockCierreInf,
     ops, setOps, bajadas, setBajadas, movs, setMovs, notas, setNotas,
     expected, saving, error, saved, autosaveError, submitTurno,
     carriedFrom, otherOpenBy, refuerzoPropioAbierto, loadError,
   } = draft;
 
-  // Mensajes de publicidad: mismo contador +/- que ya existe en Operaciones (RPCs
-  // session_count_publicidad_hoy / session_add_publicidad_evento / session_remove_...),
-  // se reusa tal cual en vez de inventar uno nuevo.
-  const [pubHoy, setPubHoy] = useState(null);
-  const [pubLoading, setPubLoading] = useState(false);
-  const [pubError, setPubError] = useState(false);
-  useEffect(() => {
-    if (!identity?.token) return;
-    supabase.rpc("session_count_publicidad_hoy", { input_token: identity.token }).then(({ data }) => setPubHoy(data ?? 0));
-  }, [identity?.token]);
-  async function addPublicidad() {
-    if (pubLoading) return;
-    setPubLoading(true); setPubError(false);
-    const { data: ok, error: pubErr } = await supabase.rpc("session_add_publicidad_evento", { input_token: identity.token });
-    if (pubErr || ok === false) setPubError(true); else setPubHoy((n) => (n ?? 0) + 1);
-    setTimeout(() => setPubLoading(false), 500);
-  }
-  async function removePublicidad() {
-    if (pubLoading) return;
-    setPubLoading(true); setPubError(false);
-    const { data: ok, error: pubErr } = await supabase.rpc("session_remove_publicidad_evento", { input_token: identity.token });
-    if (pubErr) setPubError(true); else if (ok) setPubHoy((n) => Math.max(0, (n ?? 0) - 1));
-    setTimeout(() => setPubLoading(false), 500);
-  }
+  // Mensajes de publicidad y cargas que vinieron de esos mensajes: mismo contador
+  // +/- para los dos, distinguidos por el parámetro p_tipo de las RPCs (reusan
+  // publicidad_eventos con una columna "tipo" en vez de duplicar tabla/funciones).
+  const pubMensajes = usePublicidadCounter(identity, "mensaje");
+  const pubCargas = usePublicidadCounter(identity, "carga");
 
   // Grilla de carga rápida: 5 renglones, crecen de a 5 cuando se llena el último.
   // Cada renglón vive directo en `ops` (igual que la grilla vieja de Operaciones) para
@@ -157,25 +166,32 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          <div className="bg-black/20 rounded-lg px-2.5 py-2">
-            <p className="text-[9px] text-slate-500 uppercase mb-0.5">Fichas GANA — inicio</p>
-            <p className="text-sm font-bold">{money(num(stockInicio.G || 0))}</p>
-          </div>
-        </div>
       </Card>
 
       <Card icon={<Megaphone size={15} />} title="Mensajes de publicidad">
         <div className="flex items-center justify-between">
           <p className="text-3xl font-black text-indigo-300">
-            {pubError ? "—" : pubHoy === null ? "…" : pubHoy}
+            {pubMensajes.error ? "—" : pubMensajes.count === null ? "…" : pubMensajes.count}
           </p>
           <div className="flex items-center gap-2">
-            <button onClick={removePublicidad} disabled={pubLoading} className="w-11 h-11 rounded-xl bg-white/5 text-slate-300 disabled:opacity-60 font-black text-xl flex items-center justify-center">−</button>
-            <button onClick={addPublicidad} disabled={pubLoading} className="w-11 h-11 rounded-xl bg-amber-500/20 text-amber-300 disabled:opacity-60 font-black text-xl flex items-center justify-center">+</button>
+            <button onClick={pubMensajes.remove} disabled={pubMensajes.loading} className="w-11 h-11 rounded-xl bg-white/5 text-slate-300 disabled:opacity-60 font-black text-xl flex items-center justify-center">−</button>
+            <button onClick={pubMensajes.add} disabled={pubMensajes.loading} className="w-11 h-11 rounded-xl bg-amber-500/20 text-amber-300 disabled:opacity-60 font-black text-xl flex items-center justify-center">+</button>
           </div>
         </div>
-        {pubError && <p className="text-[10px] text-rose-400 mt-1">No se pudo actualizar — probá de nuevo.</p>}
+        {pubMensajes.error && <p className="text-[10px] text-rose-400 mt-1">No se pudo actualizar — probá de nuevo.</p>}
+      </Card>
+
+      <Card icon={<Megaphone size={15} />} title="¿Cuántos cargaron?" subtitle="De esos mensajes de publicidad, cuántos terminaron en una carga">
+        <div className="flex items-center justify-between">
+          <p className="text-3xl font-black text-emerald-400">
+            {pubCargas.error ? "—" : pubCargas.count === null ? "…" : pubCargas.count}
+          </p>
+          <div className="flex items-center gap-2">
+            <button onClick={pubCargas.remove} disabled={pubCargas.loading} className="w-11 h-11 rounded-xl bg-white/5 text-slate-300 disabled:opacity-60 font-black text-xl flex items-center justify-center">−</button>
+            <button onClick={pubCargas.add} disabled={pubCargas.loading} className="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-300 disabled:opacity-60 font-black text-xl flex items-center justify-center">+</button>
+          </div>
+        </div>
+        {pubCargas.error && <p className="text-[10px] text-rose-400 mt-1">No se pudo actualizar — probá de nuevo.</p>}
       </Card>
 
       <Card icon={<Plus size={15} />} title="Cargas del turno" subtitle='Elegí P/R/L y poné el monto — la hora se pone sola'>

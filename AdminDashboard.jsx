@@ -7,6 +7,11 @@ import {
 import { Card, StatBox, MiniStat, Pill } from "./ui";
 import { supabase } from "./supabaseClient";
 import { PLATFORMS, FUENTE_TYPES, LEAD_STATES, REACTIVACION_DIAS, daysSince, downloadCsv, num, money, todayStr, classifyTurno, formatMiles } from "./lib";
+
+// Bet ya no se opera — se deja de mostrar en las vistas activas (tarjetas de turno,
+// Análisis), aunque PLATFORMS sigue trayendo las dos para no perder cómo se leían los
+// turnos viejos en otros lugares que sí siguen necesitando el historial completo.
+const PLATFORMS_ACTIVAS = PLATFORMS.filter((p) => p.key === "G");
 import GanamosImportTab from "./GanamosImportTab";
 
 const CSV_HEADERS = [
@@ -234,7 +239,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
 
     const { data: publicidadShift } = await supabase.rpc("admin_publicidad_por_turno", { input_admin_pin: adminPin });
     const pubMap = {};
-    (publicidadShift || []).forEach((p) => { pubMap[p.shift_id] = p.cantidad; });
+    (publicidadShift || []).forEach((p) => { pubMap[p.shift_id] = { mensajes: p.mensajes, cargas: p.cargas }; });
     setPublicidadByShift(pubMap);
 
     const { data: sessions } = await supabase.rpc("admin_active_sessions", { input_admin_pin: adminPin });
@@ -418,7 +423,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
         bajadasTotal, bajadasFichas, bajadasGasto, bajadasEfectivo,
         contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         opsCount: (live.ops || []).length, ops: live.ops || [], horaInicio: live.hora_inicio,
-        origenP, origenR, origenL, origenPMonto, origenRMonto, origenLMonto, mensajesPublicidad: publicidadByShift[live.id] || 0,
+        origenP, origenR, origenL, origenPMonto, origenRMonto, origenLMonto,
+        mensajesPublicidad: publicidadByShift[live.id]?.mensajes || 0, cargasPublicidad: publicidadByShift[live.id]?.cargas || 0,
       };
     }
     if (shifts.length) {
@@ -431,7 +437,8 @@ export default function AdminDashboard({ adminPin, onExit }) {
         bajadasTotal: c.bajadasTotal, bajadasFichas: c.bajadasFichas, bajadasGasto: c.bajadasGasto, bajadasEfectivo: c.bajadasEfectivo,
         contactaron: baseStats.contactados, contestaron: baseStats.contestados, cargaron: baseStats.cargaron,
         movimientos: c.cargasCount + c.retirosCount, opsCount: (last.ops || []).length, ops: last.ops || [],
-        origenP: c.nuevos, origenR: c.derivados, origenL: c.cargasLista, mensajesPublicidad: publicidadByShift[last.id] || 0,
+        origenP: c.nuevos, origenR: c.derivados, origenL: c.cargasLista,
+        mensajesPublicidad: publicidadByShift[last.id]?.mensajes || 0, cargasPublicidad: publicidadByShift[last.id]?.cargas || 0,
       };
     }
     return null;
@@ -513,8 +520,9 @@ export default function AdminDashboard({ adminPin, onExit }) {
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.contestaron}</p><p className="text-[9px] text-slate-500 uppercase">Contestaron</p></div>
                 <div className="text-center"><p className="text-lg font-black">{ahoraMismo.cargaron}</p><p className="text-[9px] text-slate-500 uppercase">Cargaron</p></div>
               </div>
-              <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-white/5">
+              <div className="grid grid-cols-5 gap-2 mt-2 pt-2 border-t border-white/5">
                 <div className="text-center"><p className="text-lg font-black text-indigo-300">{ahoraMismo.mensajesPublicidad}</p><p className="text-[9px] text-slate-500 uppercase">Msj. publicidad</p></div>
+                <div className="text-center"><p className="text-lg font-black text-indigo-300">{ahoraMismo.cargasPublicidad}</p><p className="text-[9px] text-slate-500 uppercase">Cargaron (publi)</p></div>
                 <div className="text-center">
                   <p className="text-lg font-black">{ahoraMismo.origenP}</p>
                   <p className="text-[9px] text-slate-500 uppercase">P · Publicidad</p>
@@ -665,7 +673,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
             <BajadaLista titulo="Detalle de gastos" items={bajadasDetalle.gastos} colorClass="text-amber-400" />
           </Card>
           <Card icon={<TrendingUp size={15} />} title="Neto y bono por plataforma">
-            <PlataformaBreakdown porPlataforma={totalsPorPlataforma} />
+            <PlataformaBreakdown porPlataforma={totalsPorPlataforma} platforms={PLATFORMS_ACTIVAS} />
           </Card>
           <Card icon={<TrendingUp size={15} />} title="Efectividad por franja">
             {byTurno.map(([label, d]) => (
@@ -1158,10 +1166,10 @@ function BajadaLista({ titulo, items, colorClass }) {
   );
 }
 
-function PlataformaBreakdown({ porPlataforma }) {
+function PlataformaBreakdown({ porPlataforma, platforms = PLATFORMS }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {PLATFORMS.map((p) => {
+    <div className={`grid gap-2 ${platforms.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+      {platforms.map((p) => {
         const d = porPlataforma[p.key];
         const neto = d.ventas - d.premios;
         const ticketProm = d.cargasCount ? Math.round(d.ventas / d.cargasCount) : 0;
@@ -1256,9 +1264,9 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
       </button>
       {expanded && (
         <div className="px-3.5 pb-4 pt-1 border-t border-white/5 text-xs space-y-3">
-          <PlataformaBreakdown porPlataforma={c.porPlataforma} />
+          <PlataformaBreakdown porPlataforma={c.porPlataforma} platforms={PLATFORMS_ACTIVAS} />
           <p className="text-slate-400">Nuevos: {c.nuevos} ({money(c.montoNuevos)}) · Referidos: {c.derivados} ({money(c.montoDerivados)}) · De la lista: {c.cargasLista} ({money(c.montoLista)})</p>
-          <p className="text-slate-400">Mensajes de publicidad este turno: {publicidad ?? 0}</p>
+          <p className="text-slate-400">Mensajes de publicidad este turno: {publicidad?.mensajes ?? 0} · Cargaron: {publicidad?.cargas ?? 0}</p>
           <div>
             <p className="text-slate-500 mb-1 font-semibold">
               Billeteras — inicio → cierre · total al cierre <span className="text-slate-200">{money(c.billCierreTotal)}</span>
@@ -1273,8 +1281,8 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
           </div>
           <div>
             <p className="text-slate-500 mb-1 font-semibold">Fichas — inicio → cierre</p>
-            <div className="grid grid-cols-2 gap-1">
-              {PLATFORMS.map((p) => (
+            <div className="grid grid-cols-1 gap-1">
+              {PLATFORMS_ACTIVAS.map((p) => (
                 <p key={p.key} className="text-slate-400 flex justify-between bg-black/20 rounded px-2 py-1">
                   <span>{p.label}</span><span>{money(num((s.stock_inicio || {})[p.key]))} → <b className="text-slate-200">{money(num((s.stock_cierre || {})[p.key]))}</b></span>
                 </p>
@@ -1323,7 +1331,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
                     </button>
                   </div>
                 )}
-                {PLATFORMS.map((p) => {
+                {PLATFORMS_ACTIVAS.map((p) => {
                   const d = c.diffFichas[p.key];
                   if (!c.fichasErrorRaw[p.key]) return null;
                   return (
