@@ -2172,9 +2172,21 @@ function ClientesRanking({ computedAll, adminPin }) {
 
     return Object.entries(porCliente)
       .filter(([, d]) => d.totalBono > 0)
-      .map(([cliente, d]) => ({ cliente, ...d }))
-      .sort((a, b) => (b.pendiente > 0) - (a.pendiente > 0) || b.pendiente - a.pendiente);
+      .map(([cliente, d]) => ({ cliente, ...d }));
   }, [computedAll, dateFrom, dateTo]);
+
+  // Primero los que YA retiraron después del bono — son los que hay que auditar (la plata
+  // ya salió, hay que chequear que se haya descontado bien), ordenados por retiro más
+  // reciente. Los que todavía no retiraron van después (solo quedan "a la espera", nada
+  // para revisar todavía).
+  const bonosRetirados = useMemo(
+    () => bonosBase.filter((d) => d.pendiente === 0).sort((a, b) => (b.ultimoRetiroFecha || "").localeCompare(a.ultimoRetiroFecha || "")),
+    [bonosBase]
+  );
+  const bonosPendientes = useMemo(
+    () => bonosBase.filter((d) => d.pendiente > 0).sort((a, b) => b.pendiente - a.pendiente),
+    [bonosBase]
+  );
 
   const sinDato = computedAll.every((c) => (c.shift.ops || []).every((o) => !o.cliente));
   const tePierden = ranking.filter((r) => r.neto >= 0).length; // neto >= 0: el cliente dejó más de lo que sacó
@@ -2229,26 +2241,6 @@ function ClientesRanking({ computedAll, adminPin }) {
           </Card>
         </div>
 
-        {bonosBase.length > 0 && (
-          <Card icon={<Coins size={15} />} title="Bonos dados — control de recupero" subtitle="No calza el monto exacto (cambia según lo que jugó entremedio) — marca si hubo un retiro después, para que lo revises vos">
-            <div className="space-y-1.5 max-h-80 overflow-y-auto">
-              {bonosBase.map((d) => (
-                <div key={d.cliente} className="flex items-center justify-between gap-2 bg-white/[0.02] ring-1 ring-white/5 rounded-lg px-3 py-2 text-xs">
-                  <div className="min-w-0">
-                    <p className="font-bold truncate">{d.cliente}</p>
-                    <p className="text-[10px] text-slate-500">Bono total dado: {money(d.totalBono)} · último {d.ultimoBonoFecha}</p>
-                  </div>
-                  {d.pendiente > 0 ? (
-                    <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 rounded-full px-2 py-1 flex-none text-right">Pendiente {money(d.pendiente)}<br />sin retiro después</span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-1 flex-none text-right">Retiró después ({d.ultimoRetiroFecha})<br />revisar el monto</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
         <div className="flex gap-1.5 flex-wrap mb-3">
           {Object.entries(ORDENES).map(([key, o]) => (
             <Pill key={key} active={ordenPor === key} onClick={() => setOrdenPor(key)}>{o.label}</Pill>
@@ -2276,6 +2268,43 @@ function ClientesRanking({ computedAll, adminPin }) {
             ))}
           </div>
         </Card>
+
+        {bonosBase.length > 0 && (
+          <Card icon={<Coins size={15} />} title="Bonos dados — control de recupero" subtitle="No calza el monto exacto (cambia según lo que jugó entremedio) — es para chequear que un empleado no dé un bono y después se mande la plata del retiro a él">
+            {bonosRetirados.length > 0 && (
+              <>
+                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-1.5">Ya retiraron después — revisar</p>
+                <div className="space-y-1.5 mb-3">
+                  {bonosRetirados.map((d) => (
+                    <div key={d.cliente} className="flex items-center justify-between gap-2 bg-white/[0.02] ring-1 ring-white/5 rounded-lg px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-bold truncate">{d.cliente}</p>
+                        <p className="text-[10px] text-slate-500">Bono total dado: {money(d.totalBono)} · último {d.ultimoBonoFecha}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-1 flex-none text-right">Retiró después ({d.ultimoRetiroFecha})<br />revisar el monto</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {bonosPendientes.length > 0 && (
+              <>
+                <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wide mb-1.5">Todavía sin retirar</p>
+                <div className="space-y-1.5">
+                  {bonosPendientes.map((d) => (
+                    <div key={d.cliente} className="flex items-center justify-between gap-2 bg-white/[0.02] ring-1 ring-white/5 rounded-lg px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-bold truncate">{d.cliente}</p>
+                        <p className="text-[10px] text-slate-500">Bono total dado: {money(d.totalBono)} · último {d.ultimoBonoFecha}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 rounded-full px-2 py-1 flex-none text-right">Pendiente {money(d.pendiente)}<br />sin retiro después</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </Card>
+        )}
         </>
       )}
     </>
