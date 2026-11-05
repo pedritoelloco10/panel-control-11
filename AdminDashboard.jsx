@@ -25,7 +25,7 @@ const CSV_HEADERS = [
 ];
 
 function computeShift(shift) {
-  let ventasTotal = 0, retirosTotal = 0;
+  let ventasTotal = 0, retirosTotal = 0, bonoRecuperadoRetiros = 0;
   let nuevos = 0, derivados = 0, cargasLista = 0, montoNuevos = 0, montoDerivados = 0, montoLista = 0, cargasCount = 0, retirosCount = 0;
   const porPlataforma = {
     B: { ventas: 0, premios: 0, bono: 0, cargasCount: 0, retirosCount: 0, origenP: 0, origenR: 0, origenL: 0 },
@@ -53,7 +53,10 @@ function computeShift(shift) {
       // todavía, así que NO suma a ventas/retiros/origen acá (eso ya lo trae la importación de
       // Ganamos y contaría dos veces). Solo sirve de insumo para el cruce de reconciliación.
     } else {
-      retirosTotal += m; retirosCount++;
+      // Si este retiro trae su propio "bono" cargado (recuperado, no pagado en efectivo), las
+      // fichas igual suman el monto completo (así viene de Ganamos, ya queda bien) pero esa
+      // parte no salió de la caja — se resta del efectivo esperado más abajo, no de acá.
+      retirosTotal += m; retirosCount++; bonoRecuperadoRetiros += num(o.bono);
       if (porPlataforma[o.plataforma]) { porPlataforma[o.plataforma].premios += m; porPlataforma[o.plataforma].retirosCount++; }
     }
   });
@@ -69,7 +72,9 @@ function computeShift(shift) {
   // ficha completa (eso ya queda bien en fichas, vía premios) pero en la caja de plata
   // sale MENOS de lo retirado (el bono nunca fue plata real) — esa diferencia es plata
   // que no se pagó y se puede reusar, así que suma al efectivo esperado, no a las fichas.
-  const recuperoBonoTotal = (shift.movs || []).filter((m) => m.tipo === "Recupero de bono").reduce((s, m) => s + num(m.monto), 0);
+  // Mismo concepto, pero atado al retiro puntual (campo o.bono) en vez de un movimiento
+  // suelto — las dos formas de cargarlo conviven y las dos suman acá.
+  const recuperoBonoTotal = (shift.movs || []).filter((m) => m.tipo === "Recupero de bono").reduce((s, m) => s + num(m.monto), 0) + bonoRecuperadoRetiros;
   const efectivoEsperado = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal + recuperoBonoTotal;
   const diffEfectivo = billCierreTotal - efectivoEsperado;
   // Neto = ganancia real del turno: lo que entró por cargas menos lo que salió en premios.
@@ -886,7 +891,7 @@ export default function AdminDashboard({ adminPin, onExit }) {
       {tab === "empleados" && <EmployeeManager employees={employees} adminPin={adminPin} onChange={loadAll} />}
       {tab === "billeteras" && <WalletManager wallets={wallets} adminPin={adminPin} onChange={loadAll} />}
       {tab === "ganamos" && <GanamosImportTab adminPin={adminPin} shifts={shifts} onImported={loadAll} />}
-      <OpsSheetModal data={opsModal} onClose={() => setOpsModal(null)} />
+      <OpsSheetModal data={opsModal} onClose={() => setOpsModal(null)} adminPin={adminPin} onChange={loadAll} />
     </div>
   );
 }
@@ -1054,10 +1059,18 @@ function ComparativaTab({ computedAll, adminPin }) {
   );
 }
 
-function OpsSheetModal({ data, onClose }) {
+function OpsSheetModal({ data, onClose, adminPin, onChange }) {
   if (!data) return null;
-  const ops = data.ops || [];
+  // _idx preserva la posición real dentro de shift.ops (antes de separar por plataforma más
+  // abajo), que es lo que necesita admin_editar_bono_operacion para encontrar la fila correcta.
+  const ops = (data.ops || []).map((o, _idx) => ({ ...o, _idx }));
   const splitByPlatform = !data.live;
+  const puedeEditar = Boolean(data.shiftId && adminPin);
+
+  async function guardarBono(idx, valor) {
+    await supabase.rpc("admin_editar_bono_operacion", { input_admin_pin: adminPin, target_shift_id: data.shiftId, op_index: idx, nuevo_bono: valor });
+    onChange?.();
+  }
 
   function renderTable(rows, showIndexFrom = 0) {
     return (
@@ -1076,16 +1089,31 @@ function OpsSheetModal({ data, onClose }) {
           {rows.length === 0 && (
             <tr><td colSpan={6} className="py-6 text-center text-slate-600 italic">Sin operaciones.</td></tr>
           )}
-          {rows.map((o, i) => (
-            <tr key={o.id || i} className="border-t border-white/5">
-              <td className="py-2 px-2 text-slate-600">{showIndexFrom + i + 1}</td>
-              <td className="py-2 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
-              <td className={`py-2 px-2 font-bold ${tipoOpLabel(o.tipo).className}`}>{tipoOpLabel(o.tipo).label}</td>
-              <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
-              <td className="py-2 px-2 text-right text-slate-500">{o.bono ? money(num(o.bono)) : "—"}</td>
-              <td className="py-2 px-2 text-slate-400">{o.origen || "—"}</td>
-            </tr>
-          ))}
+          {rows.map((o, i) => {
+            const esRetiro = o.tipo !== "carga" && o.tipo !== "bono" && o.tipo !== "registro_rapido";
+            return (
+              <tr key={o.id || i} className="border-t border-white/5">
+                <td className="py-2 px-2 text-slate-600">{showIndexFrom + i + 1}</td>
+                <td className="py-2 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
+                <td className={`py-2 px-2 font-bold ${tipoOpLabel(o.tipo).className}`}>{tipoOpLabel(o.tipo).label}</td>
+                <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
+                <td className="py-2 px-2 text-right text-slate-500">
+                  {esRetiro && puedeEditar ? (
+                    <input
+                      defaultValue={o.bono ? formatMiles(String(num(o.bono))) : ""}
+                      placeholder="Bono recuperado"
+                      inputMode="numeric"
+                      onBlur={(e) => { const v = formatMiles(e.target.value); e.target.value = v; if (v !== (o.bono ? formatMiles(String(num(o.bono))) : "")) guardarBono(o._idx, v); }}
+                      className="w-24 bg-black/20 rounded px-1.5 py-1 text-right text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  ) : (
+                    o.bono ? money(num(o.bono)) : "—"
+                  )}
+                </td>
+                <td className="py-2 px-2 text-slate-400">{o.origen || "—"}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     );
@@ -1388,7 +1416,7 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
           )}
           <div>
             <button
-              onClick={() => onOpenOps({ title: `${s.responsable} · ${s.fecha} · ${s.turno_label}`, ops: s.ops, live: false })}
+              onClick={() => onOpenOps({ title: `${s.responsable} · ${s.fecha} · ${s.turno_label}`, ops: s.ops, live: false, shiftId: s.id })}
               className="text-indigo-300 font-bold underline flex items-center gap-1"
             >
               Hoja de operaciones ({(s.ops || []).length}) <ChevronRight size={13} />
