@@ -278,6 +278,22 @@ export default function AdminDashboard({ adminPin, onExit }) {
   }, [shifts, dateFrom, dateTo]);
 
   const computedAll = useMemo(() => shifts.map(computeShift), [shifts]);
+
+  // Alertas de diferencias grandes: turnos con una diferencia de efectivo o fichas
+  // GANA por encima del umbral, sin justificar todavía — para verlas apenas se abre
+  // el panel, sin tener que ir turno por turno a buscarlas.
+  const UMBRAL_ALERTA = 50000;
+  const alertasGraves = useMemo(() => {
+    return computedAll
+      .filter((c) => c.hasError && (Math.abs(c.diffEfectivo) >= UMBRAL_ALERTA || Math.abs(c.diffFichas.G ?? 0) >= UMBRAL_ALERTA))
+      .map((c) => ({
+        shift: c.shift,
+        peor: Math.max(Math.abs(c.diffEfectivo), Math.abs(c.diffFichas.G ?? 0)),
+        diffEfectivo: c.diffEfectivo, diffG: c.diffFichas.G,
+      }))
+      .sort((a, b) => b.peor - a.peor)
+      .slice(0, 10);
+  }, [computedAll]);
   const turnosFiltrados = useMemo(
     () => computedAll.filter((c) =>
       (!turnoEmpleadoFiltro || c.shift.responsable === turnoEmpleadoFiltro) &&
@@ -471,6 +487,28 @@ export default function AdminDashboard({ adminPin, onExit }) {
           </button>
         ))}
       </div>
+
+      {alertasGraves.length > 0 && (
+        <button
+          onClick={() => setTab("turnos")}
+          className="w-full text-left bg-rose-500/10 ring-1 ring-rose-500/30 rounded-xl px-3 py-2.5 mb-4 hover:bg-rose-500/15"
+        >
+          <p className="text-rose-400 font-bold text-xs flex items-center gap-1.5 mb-1">
+            <AlertTriangle size={13} /> {alertasGraves.length} turno{alertasGraves.length !== 1 ? "s" : ""} con diferencia grande sin revisar (≥ {money(UMBRAL_ALERTA)})
+          </p>
+          <div className="space-y-0.5">
+            {alertasGraves.slice(0, 4).map((a) => (
+              <p key={a.shift.id} className="text-[11px] text-slate-400">
+                {a.shift.fecha} · {a.shift.turno_label} · {a.shift.responsable} —{" "}
+                {Math.abs(a.diffEfectivo) >= UMBRAL_ALERTA && <span>efectivo {money(a.diffEfectivo)}</span>}
+                {Math.abs(a.diffEfectivo) >= UMBRAL_ALERTA && Math.abs(a.diffG ?? 0) >= UMBRAL_ALERTA && " · "}
+                {Math.abs(a.diffG ?? 0) >= UMBRAL_ALERTA && <span>fichas GANA {money(a.diffG)}</span>}
+              </p>
+            ))}
+            {alertasGraves.length > 4 && <p className="text-[10px] text-slate-600">...y {alertasGraves.length - 4} más — tocá para ver todos en Turnos.</p>}
+          </div>
+        </button>
+      )}
 
       {tab === "resumen" && (
         <>
