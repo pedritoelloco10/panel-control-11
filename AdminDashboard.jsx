@@ -1311,7 +1311,22 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
           {(s.movs || []).length > 0 && (
             <div>
               <p className="text-slate-500 mb-1 font-semibold">Movimientos ({s.movs.length})</p>
-              {s.movs.map((m, i) => (<p key={i} className="text-slate-400">{m.tipo} · {m.plataforma} · {money(num(m.monto))} {m.nota && `· ${m.nota}`}</p>))}
+              {s.movs.map((m, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-slate-400 py-0.5">
+                  <span className="truncate">{m.tipo} · {m.plataforma} · {money(num(m.monto))} {m.nota && `· ${m.nota}`}</span>
+                  <select
+                    value={m.tipo}
+                    onChange={async (e) => {
+                      await supabase.rpc("admin_editar_tipo_movimiento", { input_admin_pin: adminPin, target_shift_id: s.id, mov_index: i, nuevo_tipo: e.target.value });
+                      onChange();
+                    }}
+                    className="bg-black/20 rounded px-1.5 py-0.5 text-[10px] text-indigo-300 flex-none"
+                  >
+                    <option value="Compra">Compra</option>
+                    <option value="Recupero de bono">Recupero de bono</option>
+                  </select>
+                </div>
+              ))}
             </div>
           )}
           {s.notas && <div><p className="text-slate-500 mb-1 font-semibold">Notas</p><p className="italic text-slate-300">{s.notas}</p></div>}
