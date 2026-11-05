@@ -18,10 +18,10 @@
 insert into app_settings (key, value) values ('ganamos_import_token_hash', '')
   on conflict (key) do nothing;
 
--- Poné acá el código real (cambialo por el que te paso en el chat, o por
--- el que vos prefieras generar — tiene que ser largo y al azar, no un PIN
--- corto, porque esto no tiene el mismo freno contra intentos repetidos
--- que sí tiene el login de admin).
+-- Poné acá el código real (el que te paso en el chat, guardalo aparte —
+-- NUNCA lo escribas en este archivo si lo vas a subir a GitHub, un secreto
+-- así no debe quedar en el código versionado). Pegalo directo en el SQL
+-- Editor de Supabase con el valor real, pero no lo guardes así en el repo.
 update app_settings
 set value = extensions.crypt('PONÉ_ACÁ_EL_CÓDIGO_LARGO', extensions.gen_salt('bf'))
 where key = 'ganamos_import_token_hash';
