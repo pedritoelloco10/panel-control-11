@@ -2138,6 +2138,44 @@ function ClientesRanking({ computedAll, adminPin }) {
   const topVeces = useMemo(() => [...clientesBase].sort(ORDENES.vecesCargado.sort).slice(0, 15), [clientesBase]);
   const topMonto = useMemo(() => [...clientesBase].sort(ORDENES.montoCargado.sort).slice(0, 15), [clientesBase]);
 
+  // Control de bonos: no hay forma de calzar el monto exacto de un retiro contra el bono
+  // que se le dio antes (cambia según lo que ganó/perdió jugando entremedio) — así que esto
+  // es una ayuda visual, no una verificación automática. Recorre los turnos en orden
+  // cronológico y, por cliente, acumula el bono dado; en el primer retiro posterior lo da
+  // por "atendido" (vos revisás si el monto estuvo bien).
+  const bonosBase = useMemo(() => {
+    const porCliente = {};
+    const shiftsOrdenados = [...computedAll]
+      .filter((c) => {
+        const s = c.shift;
+        if (dateFrom && s.fecha < dateFrom) return false;
+        if (dateTo && s.fecha > dateTo) return false;
+        return true;
+      })
+      .sort((a, b) => (a.shift.fecha + (a.shift.hora_inicio || "")).localeCompare(b.shift.fecha + (b.shift.hora_inicio || "")));
+
+    shiftsOrdenados.forEach((c) => {
+      const s = c.shift;
+      (s.ops || []).forEach((o) => {
+        const cliente = (o.cliente || "").trim();
+        if (!cliente) return;
+        const bono = num(o.bono);
+        if (!porCliente[cliente]) porCliente[cliente] = { pendiente: 0, totalBono: 0, ultimoBonoFecha: null, ultimoRetiroFecha: null };
+        const d = porCliente[cliente];
+        if (o.tipo === "carga" && bono > 0) {
+          d.pendiente += bono; d.totalBono += bono; d.ultimoBonoFecha = s.fecha;
+        } else if (o.tipo === "retiro" && d.pendiente > 0) {
+          d.pendiente = 0; d.ultimoRetiroFecha = s.fecha;
+        }
+      });
+    });
+
+    return Object.entries(porCliente)
+      .filter(([, d]) => d.totalBono > 0)
+      .map(([cliente, d]) => ({ cliente, ...d }))
+      .sort((a, b) => (b.pendiente > 0) - (a.pendiente > 0) || b.pendiente - a.pendiente);
+  }, [computedAll, dateFrom, dateTo]);
+
   const sinDato = computedAll.every((c) => (c.shift.ops || []).every((o) => !o.cliente));
   const tePierden = ranking.filter((r) => r.neto >= 0).length; // neto >= 0: el cliente dejó más de lo que sacó
   const teGanan = ranking.filter((r) => r.neto < 0).length;
@@ -2190,6 +2228,26 @@ function ClientesRanking({ computedAll, adminPin }) {
             </div>
           </Card>
         </div>
+
+        {bonosBase.length > 0 && (
+          <Card icon={<Coins size={15} />} title="Bonos dados — control de recupero" subtitle="No calza el monto exacto (cambia según lo que jugó entremedio) — marca si hubo un retiro después, para que lo revises vos">
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {bonosBase.map((d) => (
+                <div key={d.cliente} className="flex items-center justify-between gap-2 bg-white/[0.02] ring-1 ring-white/5 rounded-lg px-3 py-2 text-xs">
+                  <div className="min-w-0">
+                    <p className="font-bold truncate">{d.cliente}</p>
+                    <p className="text-[10px] text-slate-500">Bono total dado: {money(d.totalBono)} · último {d.ultimoBonoFecha}</p>
+                  </div>
+                  {d.pendiente > 0 ? (
+                    <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 rounded-full px-2 py-1 flex-none text-right">Pendiente {money(d.pendiente)}<br />sin retiro después</span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-1 flex-none text-right">Retiró después ({d.ultimoRetiroFecha})<br />revisar el monto</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div className="flex gap-1.5 flex-wrap mb-3">
           {Object.entries(ORDENES).map(([key, o]) => (
