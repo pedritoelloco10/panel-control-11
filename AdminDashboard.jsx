@@ -1292,14 +1292,16 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
             <p className="text-slate-500 mb-1 font-semibold">Fichas — inicio → cierre</p>
             <div className="grid grid-cols-1 gap-1">
               {PLATFORMS_ACTIVAS.map((p) => (
-                <p key={p.key} className="text-slate-400 flex justify-between bg-black/20 rounded px-2 py-1">
-                  <span>{p.label}</span><span>{money(num((s.stock_inicio || {})[p.key]))} → <b className="text-slate-200">{money(num((s.stock_cierre || {})[p.key]))}</b></span>
-                </p>
+                <div key={p.key} className="bg-black/20 rounded px-2 py-1.5">
+                  <p className="text-slate-400 flex justify-between">
+                    <span>{p.label}</span><span>{money(num((s.stock_inicio || {})[p.key]))} → <b className="text-slate-200">{money(num((s.stock_cierre || {})[p.key]))}</b></span>
+                  </p>
+                  {p.key === "G" && s.stock_cierre?.G_reportado && (
+                    <p className="text-[10px] text-indigo-300 mt-1 pt-1 border-t border-white/10">Empleado anotó al cerrar: {money(num(s.stock_cierre.G_reportado))} (referencia, sin verificar todavía)</p>
+                  )}
+                </div>
               ))}
             </div>
-            {s.stock_cierre?.G_reportado && (
-              <p className="text-[10px] text-indigo-300 mt-1">GANA — el empleado anotó {money(num(s.stock_cierre.G_reportado))} al cerrar (referencia, sin verificar todavía)</p>
-            )}
             <CorregirFichasInicio shift={s} adminPin={adminPin} onChange={onChange} />
           </div>
           {(s.bajadas || []).length > 0 && (
