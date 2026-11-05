@@ -1292,12 +1292,13 @@ function ShiftRow({ c, expanded, onToggle, onDelete, onOpenOps, adminPin, onChan
             <p className="text-slate-500 mb-1 font-semibold">Fichas — inicio → cierre</p>
             <div className="grid grid-cols-1 gap-1">
               {PLATFORMS_ACTIVAS.map((p) => (
-                <div key={p.key} className="bg-black/20 rounded px-2 py-1.5">
-                  <p className="text-slate-400 flex justify-between">
-                    <span>{p.label}</span><span>{money(num((s.stock_inicio || {})[p.key]))} → <b className="text-slate-200">{money(num((s.stock_cierre || {})[p.key]))}</b></span>
+                <div key={p.key} className="bg-black/20 rounded px-2.5 py-2">
+                  <p className="text-slate-400 flex justify-between items-baseline text-sm">
+                    <span className="font-semibold">{p.label}</span>
+                    <span>{money(num((s.stock_inicio || {})[p.key]))} → <b className="text-slate-100 text-base">{money(num((s.stock_cierre || {})[p.key]))}</b></span>
                   </p>
                   {p.key === "G" && s.stock_cierre?.G_reportado && (
-                    <p className="text-[10px] text-indigo-300 mt-1 pt-1 border-t border-white/10">Empleado anotó al cerrar: {money(num(s.stock_cierre.G_reportado))} (referencia, sin verificar todavía)</p>
+                    <p className="text-xs text-indigo-300 mt-1.5 pt-1.5 border-t border-white/10">Empleado anotó al cerrar: <b>{money(num(s.stock_cierre.G_reportado))}</b> (referencia, sin verificar todavía)</p>
                   )}
                 </div>
               ))}
