@@ -41,7 +41,7 @@ function usePublicidadCounter(identity, tipo) {
     if (loading) return;
     setLoading(true); setError(false);
     const { data: ok, error: err } = await supabase.rpc("session_add_publicidad_evento", { input_token: identity.token, p_tipo: tipo });
-    if (err || ok === false) setError(true); else setCount((n) => (n ?? 0) + 1);
+    if (err || ok === false) { console.error("publicidad add falló", { tipo, ok, err }); setError(true); } else setCount((n) => (n ?? 0) + 1);
     setTimeout(() => setLoading(false), 500);
   }
   async function remove() {
