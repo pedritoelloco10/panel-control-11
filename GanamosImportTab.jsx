@@ -364,27 +364,6 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
             </Card>
           )}
 
-          {cruces.map(({ shift, resultados }) => {
-            const revisar = resultados.filter((r) => r.estado !== "ok");
-            return (
-              <Card
-                key={shift.id}
-                icon={revisar.length > 0 ? <AlertTriangle size={15} className="text-amber-400" /> : <CheckCircle2 size={15} className="text-emerald-400" />}
-                title={`Cruce con lo que anotó el empleado — ${shift.fecha} ${shift.turno_label || ""}`}
-                subtitle={`${shift.responsable} · ${resultados.length - revisar.length}/${resultados.length} OK — así se resuelve el origen de cada carga`}
-              >
-                <div className="space-y-1.5">
-                  {resultados.map((r, i) => (
-                    <div key={i} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${r.estado === "ok" ? "bg-white/5" : "bg-amber-500/10 ring-1 ring-amber-500/30"}`}>
-                      <span className="text-slate-400">{ORIGEN_LETRA[r.origen] || "?"} · {money(num(r.monto))} · {new Date(r.hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
-                      <span className={r.estado === "ok" ? "text-emerald-400" : "text-amber-400 font-bold"}>{r.detalle}</span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            );
-          })}
-
           <Card icon={<Wallet size={15} className="text-indigo-300" />} title="Saldo real de Ganamos al cierre de cada turno" subtitle="Se completa solo con el saldo de la última operación pegada — revisalo y corregilo si hace falta">
             <div className="space-y-2">
               {shiftsAImportar.map((shift) => (
@@ -408,6 +387,27 @@ export default function GanamosImportTab({ adminPin, shifts, onImported }) {
             </div>
             <p className="text-[10px] text-slate-600 mt-2">Opcional — si lo dejás vacío, el control de fichas GANA de ese turno queda sin verificar hasta que lo cargues en una importación siguiente.</p>
           </Card>
+
+          {cruces.map(({ shift, resultados }) => {
+            const revisar = resultados.filter((r) => r.estado !== "ok");
+            return (
+              <Card
+                key={shift.id}
+                icon={revisar.length > 0 ? <AlertTriangle size={15} className="text-amber-400" /> : <CheckCircle2 size={15} className="text-emerald-400" />}
+                title={`Cruce con lo que anotó el empleado — ${shift.fecha} ${shift.turno_label || ""}`}
+                subtitle={`${shift.responsable} · ${resultados.length - revisar.length}/${resultados.length} OK — así se resuelve el origen de cada carga`}
+              >
+                <div className="space-y-1.5">
+                  {resultados.map((r, i) => (
+                    <div key={i} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${r.estado === "ok" ? "bg-white/5" : "bg-amber-500/10 ring-1 ring-amber-500/30"}`}>
+                      <span className="text-slate-400">{ORIGEN_LETRA[r.origen] || "?"} · {money(num(r.monto))} · {new Date(r.hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+                      <span className={r.estado === "ok" ? "text-emerald-400" : "text-amber-400 font-bold"}>{r.detalle}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
 
           <Card icon={<CheckCircle2 size={15} className="text-emerald-400" />} title={`${resumen.conTurno.length} operación(es) listas para importar`} subtitle={`En ${new Set(resumen.conTurno.map((f) => f.shift.id)).size} turno(s)`}>
             {cruces.length === 0 && (
