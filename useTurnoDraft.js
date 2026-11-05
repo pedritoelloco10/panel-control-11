@@ -201,14 +201,19 @@ export function useTurnoDraft(identity) {
     const res = {};
     PLATFORMS.forEach((p) => {
       const stockIni = num(stockInicio[p.key]);
-      const mov = movs.filter((m) => m.plataforma === p.key).reduce((s, m) => s + num(m.monto), 0);
+      // "Recupero de bono" no mueve fichas (el retiro completo ya las devuelve) — solo
+      // "Compra de fichas" entra acá. Ver la nota igual en AdminDashboard.jsx (computeShift).
+      const mov = movs.filter((m) => m.plataforma === p.key && m.tipo !== "Recupero de bono").reduce((s, m) => s + num(m.monto), 0);
       res[p.key] = stockIni - porPlataforma[p.key].carga - porPlataforma[p.key].bono + porPlataforma[p.key].retiro + mov;
     });
     const ventasTotal = porPlataforma.B.carga + porPlataforma.G.carga;
     const retirosTotal = porPlataforma.B.retiro + porPlataforma.G.retiro;
     const bajadasTotal = bajadas.reduce((s, b) => s + num(b.monto), 0);
     const billInicioTotal = Object.values(billInicio).reduce((s, v) => s + num(v), 0);
-    const efectivoEsperado = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal;
+    // El bono recuperado de un retiro es plata que no salió de la caja — suma al efectivo
+    // esperado (no a las fichas, que ya quedan bien con el retiro completo).
+    const recuperoBonoTotal = movs.filter((m) => m.tipo === "Recupero de bono").reduce((s, m) => s + num(m.monto), 0);
+    const efectivoEsperado = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal + recuperoBonoTotal;
     return { stock: res, efectivoEsperado, ventasTotal, retirosTotal };
   }, [opsFilled, movs, stockInicio, billInicio, bajadas]);
 

@@ -65,7 +65,12 @@ function computeShift(shift) {
   const gastosDetalle = (shift.bajadas || []).filter((b) => b.destino === "Gasto de oficina");
   const billInicioTotal = Object.values(shift.bill_inicio || {}).reduce((s, v) => s + num(v), 0);
   const billCierreTotal = Object.values(shift.bill_cierre || {}).reduce((s, v) => s + num(v), 0);
-  const efectivoEsperado = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal;
+  // "Recupero de bono": cuando un retiro incluye un bono no retirable, Ganamos saca la
+  // ficha completa (eso ya queda bien en fichas, vía premios) pero en la caja de plata
+  // sale MENOS de lo retirado (el bono nunca fue plata real) — esa diferencia es plata
+  // que no se pagó y se puede reusar, así que suma al efectivo esperado, no a las fichas.
+  const recuperoBonoTotal = (shift.movs || []).filter((m) => m.tipo === "Recupero de bono").reduce((s, m) => s + num(m.monto), 0);
+  const efectivoEsperado = billInicioTotal + ventasTotal - retirosTotal - bajadasTotal + recuperoBonoTotal;
   const diffEfectivo = billCierreTotal - efectivoEsperado;
   // Neto = ganancia real del turno: lo que entró por cargas menos lo que salió en premios.
   // Las bajadas (a efectivo, a fichas, o a un gasto) son solo información de a dónde fue esa
@@ -76,7 +81,10 @@ function computeShift(shift) {
   const diffFichas = {};
   PLATFORMS.forEach((p) => {
     const stockIni = num((shift.stock_inicio || {})[p.key]);
-    const mov = (shift.movs || []).filter((m) => m.plataforma === p.key).reduce((s, m) => s + num(m.monto), 0);
+    // "Recupero de bono" no suma acá — ya queda bien reflejado en premios (abajo), sumarlo
+    // de nuevo acá lo contaría dos veces. Solo "Compra de fichas" (y lo que no sea recupero)
+    // mueve el stock esperado de fichas.
+    const mov = (shift.movs || []).filter((m) => m.plataforma === p.key && m.tipo !== "Recupero de bono").reduce((s, m) => s + num(m.monto), 0);
     const esperado = stockIni - porPlataforma[p.key].ventas - porPlataforma[p.key].bono + porPlataforma[p.key].premios + mov;
     const informadoRaw = (shift.stock_cierre || {})[p.key];
     diffFichas[p.key] = informadoRaw === undefined || informadoRaw === "" || informadoRaw == null ? null : num(informadoRaw) - esperado;
