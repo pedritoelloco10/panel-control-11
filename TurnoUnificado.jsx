@@ -218,7 +218,7 @@ export default function TurnoUnificado({ wallets, draft, identity }) {
         <ListEditor
           items={movs} setItems={setMovs} addLabel="Agregar compra"
           fields={[
-            { key: "tipo", type: "select", options: ["Compra"], placeholder: "Tipo" },
+            { key: "tipo", type: "select", options: ["Compra", "Recupero de bono"], placeholder: "Tipo" },
             { key: "plataforma", type: "select", options: ["G"], placeholder: "Plataforma" },
             { key: "monto", type: "text", placeholder: "Monto (±)", numeric: true },
             { key: "nota", type: "text", placeholder: "Nota" },
