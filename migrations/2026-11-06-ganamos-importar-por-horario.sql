@@ -29,7 +29,7 @@ declare
   v_via_admin boolean;
   v_origen text;
   v_lote text := extract(epoch from clock_timestamp())::text;
-  op jsonb;
+  v_op jsonb;
   v_shift_id uuid;
   v_fecha_hora timestamp;
   v_turnos_tocados int := 0;
@@ -45,9 +45,9 @@ begin
   create temporary table tmp_ops_por_turno (shift_id uuid, op jsonb) on commit drop;
   create temporary table tmp_sin_turno (tx text) on commit drop;
 
-  for op in select * from jsonb_array_elements(operaciones)
+  for v_op in select * from jsonb_array_elements(operaciones)
   loop
-    v_fecha_hora := (op->>'fecha_hora')::timestamp;
+    v_fecha_hora := (v_op->>'fecha_hora')::timestamp;
     v_shift_id := null;
 
     select s.id into v_shift_id
@@ -60,9 +60,9 @@ begin
     limit 1;
 
     if v_shift_id is null then
-      insert into tmp_sin_turno (tx) values (op->>'ganamos_tx');
+      insert into tmp_sin_turno (tx) values (v_op->>'ganamos_tx');
     else
-      insert into tmp_ops_por_turno (shift_id, op) values (v_shift_id, op);
+      insert into tmp_ops_por_turno (shift_id, op) values (v_shift_id, v_op);
     end if;
   end loop;
 
