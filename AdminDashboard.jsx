@@ -1059,6 +1059,39 @@ function ComparativaTab({ computedAll, adminPin }) {
   );
 }
 
+function BonoInput({ shiftId, opIndex, value, adminPin, onSaved }) {
+  const [val, setVal] = useState(value ? formatMiles(String(num(value))) : "");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState(null); // "ok" | "error" | null
+
+  async function guardar() {
+    if (saving) return;
+    setSaving(true); setStatus(null);
+    const { error } = await supabase.rpc("admin_editar_bono_operacion", { input_admin_pin: adminPin, target_shift_id: shiftId, op_index: opIndex, nuevo_bono: val });
+    setSaving(false);
+    setStatus(error ? "error" : "ok");
+    if (!error) onSaved?.();
+    setTimeout(() => setStatus(null), 2500);
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <input
+        value={val}
+        placeholder="0"
+        inputMode="numeric"
+        onChange={(e) => setVal(formatMiles(e.target.value))}
+        className="w-20 bg-black/20 rounded px-1.5 py-1 text-right text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+      />
+      <button onClick={guardar} disabled={saving} className="text-[10px] font-bold text-indigo-300 underline disabled:opacity-40 flex-none">
+        {saving ? "..." : "Guardar"}
+      </button>
+      {status === "ok" && <CheckCircle2 size={13} className="text-emerald-400 flex-none" />}
+      {status === "error" && <AlertTriangle size={13} className="text-rose-400 flex-none" />}
+    </div>
+  );
+}
+
 function OpsSheetModal({ data, onClose, adminPin, onChange }) {
   if (!data) return null;
   // _idx preserva la posición real dentro de shift.ops (antes de separar por plataforma más
@@ -1066,11 +1099,6 @@ function OpsSheetModal({ data, onClose, adminPin, onChange }) {
   const ops = (data.ops || []).map((o, _idx) => ({ ...o, _idx }));
   const splitByPlatform = !data.live;
   const puedeEditar = Boolean(data.shiftId && adminPin);
-
-  async function guardarBono(idx, valor) {
-    await supabase.rpc("admin_editar_bono_operacion", { input_admin_pin: adminPin, target_shift_id: data.shiftId, op_index: idx, nuevo_bono: valor });
-    onChange?.();
-  }
 
   function renderTable(rows, showIndexFrom = 0) {
     return (
@@ -1099,13 +1127,7 @@ function OpsSheetModal({ data, onClose, adminPin, onChange }) {
                 <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
                 <td className="py-2 px-2 text-right text-slate-500">
                   {esRetiro && puedeEditar ? (
-                    <input
-                      defaultValue={o.bono ? formatMiles(String(num(o.bono))) : ""}
-                      placeholder="Bono recuperado"
-                      inputMode="numeric"
-                      onBlur={(e) => { const v = formatMiles(e.target.value); e.target.value = v; if (v !== (o.bono ? formatMiles(String(num(o.bono))) : "")) guardarBono(o._idx, v); }}
-                      className="w-24 bg-black/20 rounded px-1.5 py-1 text-right text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
+                    <BonoInput shiftId={data.shiftId} opIndex={o._idx} value={o.bono} adminPin={adminPin} onSaved={onChange} />
                   ) : (
                     o.bono ? money(num(o.bono)) : "—"
                   )}
@@ -1137,8 +1159,12 @@ function OpsSheetModal({ data, onClose, adminPin, onChange }) {
           renderTable(ops)
         ) : (
           <>
-            <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">BET — {bet.length} operaciones</p>
-            {renderTable(bet)}
+            {bet.length > 0 && (
+              <>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">BET — {bet.length} operaciones</p>
+                {renderTable(bet)}
+              </>
+            )}
             <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">GANA — {gana.length} operaciones</p>
             {renderTable(gana)}
             {otras.length > 0 && (
