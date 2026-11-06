@@ -56,8 +56,10 @@ export default function GanamosImportLimitado() {
       setResultado({ ok: false, mensaje: "No se pudo importar — revisá el código, o probá de nuevo." });
     } else {
       const sinTurno = data.sin_turno || [];
+      const yaExistia = data.ya_existia || [];
       let msg = `Listo. Se repartió en ${data.turnos_tocados} turno${data.turnos_tocados !== 1 ? "s" : ""}, ${data.operaciones_agregadas} operación${data.operaciones_agregadas !== 1 ? "es" : ""} nueva${data.operaciones_agregadas !== 1 ? "s" : ""}.`;
       if (sinTurno.length > 0) msg += ` ${sinTurno.length} quedaron sin turno (TX: ${sinTurno.join(", ")}) — no hay ningún turno cerrado cuyo horario las contenga.`;
+      if (yaExistia.length > 0) msg += ` ${yaExistia.length} ya estaban cargadas en algún turno, no se tocaron (TX: ${yaExistia.join(", ")}).`;
       setResultado({ ok: true, mensaje: msg });
     }
   }

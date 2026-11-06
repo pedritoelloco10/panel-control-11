@@ -32,6 +32,7 @@ declare
   v_op jsonb;
   v_shift_id uuid;
   v_fecha_hora timestamp;
+  v_tx_existentes_global text[];
   v_turnos_tocados int := 0;
   v_total_agregadas int := 0;
   r record;
@@ -44,6 +45,17 @@ begin
 
   create temporary table tmp_ops_por_turno (shift_id uuid, op jsonb) on commit drop;
   create temporary table tmp_sin_turno (tx text) on commit drop;
+  create temporary table tmp_ya_existe (tx text) on commit drop;
+
+  -- Chequeo GLOBAL de duplicados: un ganamos_tx que ya esté en CUALQUIER turno
+  -- (no solo el que le toque por horario) no se vuelve a insertar en ningún
+  -- lado. Esto evita que un límite de horario ajustado (un cierre real un
+  -- poco después de lo esperado) termine metiendo la misma operación en dos
+  -- turnos distintos si se reimporta.
+  select coalesce(array_agg(distinct elem->>'ganamos_tx'), '{}')
+    into v_tx_existentes_global
+    from shifts s2, jsonb_array_elements(s2.ops) as elem
+    where elem->>'ganamos_tx' is not null;
 
   for v_op in select * from jsonb_array_elements(operaciones)
   loop
@@ -59,7 +71,9 @@ begin
     order by s.cerrado_at desc nulls last
     limit 1;
 
-    if v_shift_id is null then
+    if v_op->>'ganamos_tx' is not null and v_op->>'ganamos_tx' = any(v_tx_existentes_global) then
+      insert into tmp_ya_existe (tx) values (v_op->>'ganamos_tx');
+    elsif v_shift_id is null then
       insert into tmp_sin_turno (tx) values (v_op->>'ganamos_tx');
     else
       insert into tmp_ops_por_turno (shift_id, op) values (v_shift_id, v_op);
@@ -134,7 +148,8 @@ begin
   return jsonb_build_object(
     'turnos_tocados', v_turnos_tocados,
     'operaciones_agregadas', v_total_agregadas,
-    'sin_turno', (select coalesce(jsonb_agg(tx), '[]'::jsonb) from tmp_sin_turno)
+    'sin_turno', (select coalesce(jsonb_agg(tx), '[]'::jsonb) from tmp_sin_turno),
+    'ya_existia', (select coalesce(jsonb_agg(tx), '[]'::jsonb) from tmp_ya_existe)
   );
 end;
 $function$;
