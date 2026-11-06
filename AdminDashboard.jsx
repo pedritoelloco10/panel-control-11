@@ -1108,14 +1108,16 @@ function OpsSheetModal({ data, onClose, adminPin, onChange }) {
             <th className="py-2 px-2 font-semibold">#</th>
             <th className="py-2 px-2 font-semibold">Plataforma</th>
             <th className="py-2 px-2 font-semibold">Tipo</th>
+            <th className="py-2 px-2 font-semibold">Cliente</th>
             <th className="py-2 px-2 font-semibold text-right">Monto</th>
             <th className="py-2 px-2 font-semibold text-right">Bono</th>
             <th className="py-2 px-2 font-semibold">Origen</th>
+            <th className="py-2 px-2 font-semibold text-slate-600">TX</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={6} className="py-6 text-center text-slate-600 italic">Sin operaciones.</td></tr>
+            <tr><td colSpan={8} className="py-6 text-center text-slate-600 italic">Sin operaciones.</td></tr>
           )}
           {rows.map((o, i) => {
             const esRetiro = o.tipo !== "carga" && o.tipo !== "bono" && o.tipo !== "registro_rapido";
@@ -1124,6 +1126,7 @@ function OpsSheetModal({ data, onClose, adminPin, onChange }) {
                 <td className="py-2 px-2 text-slate-600">{showIndexFrom + i + 1}</td>
                 <td className="py-2 px-2 font-bold">{o.plataforma === "B" ? "BET" : o.plataforma === "G" ? "GANA" : o.plataforma}</td>
                 <td className={`py-2 px-2 font-bold ${tipoOpLabel(o.tipo).className}`}>{tipoOpLabel(o.tipo).label}</td>
+                <td className="py-2 px-2 text-slate-400">{o.cliente || o.usuario || "—"}</td>
                 <td className="py-2 px-2 text-right">{money(num(o.monto))}</td>
                 <td className="py-2 px-2 text-right text-slate-500">
                   {esRetiro && puedeEditar ? (
@@ -1133,6 +1136,7 @@ function OpsSheetModal({ data, onClose, adminPin, onChange }) {
                   )}
                 </td>
                 <td className="py-2 px-2 text-slate-400">{o.origen || "—"}</td>
+                <td className="py-2 px-2 text-slate-600 text-[10px]">{o.ganamos_tx || "—"}</td>
               </tr>
             );
           })}
